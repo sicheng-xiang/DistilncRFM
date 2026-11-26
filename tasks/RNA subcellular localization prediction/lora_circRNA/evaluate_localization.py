@@ -1,4 +1,4 @@
-# 修改原因：Windows 迁移，保持原模型与指标计算，仅调整路径和启动方式；修改时间：2026-11-09
+
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 """复评 circRNA <512 nt 测试子集。修改时间：2026-10-14。
@@ -18,9 +18,9 @@ from tasks.inference_efficiency import InferenceMeter, add_inference_arguments, 
 
 def get_args():
     p = argparse.ArgumentParser(description=__doc__)
-    #p.add_argument('--LM_path', default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM', help='必须与适配器训练时使用的底座一致')
-    #p.add_argument('--LM_path', default='/root/autodl-tmp/structRFM-master2/model/structRFM_11M', help='必须与适配器训练时使用的底座一致')
-    #p.add_argument('--LM_path', default='/root/autodl-tmp/structRFM-master2/model/structRFM_86M', help='必须与适配器训练时使用的底座一致')
+    
+    
+    
     p.add_argument('--LM_path', default=str(ROOT / 'model/DistilncRFM-EW'), help='必须与适配器训练时使用的底座一致')
 
     
@@ -66,7 +66,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.LM_path)
     dataset = RNADataset(args.data_dir, 'circRNA', 'test', tokenizer,
                          seed=0, train=False, max_nt_exclusive=512)
-    # 修改原因：与训练的筛选、标签、padding及截断方式完全一致；修改时间：2026-10-14。
+    
     label2id = {'nucleus': 0, 'cytoplasm': 1}
     collator = SeqClsCollator(max_seq_len=512, tokenizer=tokenizer, label2id=label2id,
                              replace_T=True, replace_U=False, is_structRFM=True)
@@ -92,7 +92,7 @@ def main():
     meter.save(out_dir)
     scores = np.concatenate(logits_all)
     truth = np.concatenate(labels_all)
-    # 修改原因：沿用训练 metrics.py 的 numpy softmax 和 argmax；显式导入 AUC 函数，不吞异常。
+    
     exp = np.exp(scores - scores.max(axis=1, keepdims=True))
     probs = exp / exp.sum(axis=1, keepdims=True)
     pred = probs.argmax(axis=1)

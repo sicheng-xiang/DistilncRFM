@@ -7,17 +7,14 @@ import torch.nn.functional as F
 class SeqClsLoss(nn.Module):
     def __init__(self, pos_weight=2.0,label_smoothing=0.0):
         super(SeqClsLoss, self).__init__()
-        # 给正样本更高权重（lncRNA二分类: nucleus vs cytoplasm）
-        # 数据: nucleus(636) > cytoplasm(367), cytoplasm是少数类(标签1)
-        self.pos_weight = torch.tensor([1.0, pos_weight])  # [nucleus权重, cytoplasm权重]
+        # Assign a larger loss weight to the positive class.
+        # Cytoplasm (label 1) is the minority class.
+        self.pos_weight = torch.tensor([1.0, pos_weight])  # Class weights: nucleus, cytoplasm.
           # Label smoothing
         self.label_smoothing = label_smoothing
 
     def forward(self, outputs, labels):
-        """
-        outputs: 模型输出 [B, 2]
-        labels: 真实标签 [B]
-        """
+        """Compute classification loss from logits [B, 2] and labels [B]."""
         weight = self.pos_weight.to(outputs.device)
         loss = F.cross_entropy(
             outputs,

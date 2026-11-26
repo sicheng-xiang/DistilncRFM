@@ -13,37 +13,37 @@ class IRESDataset(Dataset):
         self.prefix = prefix
         self.tokenizer = tokenizer
 
-        # 区分 train / test
+        # Select the training or test split.
         split = "train" if train else "test"
         
-        # 正负样本文件路径
+        # Paths for positive and negative examples.
         pos_fa = osp.join(fasta_dir, split, "positive", f"positive_{split}_data.fa")
         neg_fa = osp.join(fasta_dir, split, "negative", f"negative_{split}_data.fa")
 
-        # 格式完全对齐原代码：(seq, name, label)
+        
         self.data = []
 
-        # ===================== 修复：分别读取正负样本，直接打标签 =====================
-        # 正样本 label = "1"
+        
+        # Positive label = "1".
         for x in SeqIO.parse(pos_fa, "fasta"):
             seq = str(x.seq)
             name = x.description.split(" ")[0]
             label = "positive" 
             self.data.append((seq, name, label))
 
-        # 负样本 label = "0"
+        # Negative label = "0".
         for x in SeqIO.parse(neg_fa, "fasta"):
             seq = str(x.seq)
             name = x.description.split(" ")[0]
             label = "negative"
             self.data.append((seq, name, label))
 
-        # 随机打乱（和原代码一致）
+        # Shuffle examples.
         np_rng = np.random.RandomState(seed=seed)
         np_rng.shuffle(self.data)
 
     def __getitem__(self, idx):
-        # 返回格式 100% 对齐原代码
+        
         instance = self.data[idx]
         seq = instance[0]
         name = instance[1]

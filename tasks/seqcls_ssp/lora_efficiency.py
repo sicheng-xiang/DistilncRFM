@@ -1,5 +1,5 @@
 """LoRA efficiency measurement; preserves the original trainer's computation."""
-# 修改原因：为原 LoRA 训练补充与全量微调相同口径的效率测评（显存峰值/吞吐量 batch/s/耗时），LoRA 配置不变；修改时间：2026-11-10
+
 import json
 import math
 import time
@@ -17,7 +17,7 @@ class MeasuredLoraTrainer(SeqClsTrainer):
     _vram_checked = False
 
     def _check_vram_once(self):
-        """第一次参数更新后（激活、梯度、优化器状态均已分配）立即检查，显存不够时不必等一整轮才发现。"""
+        """Check VRAM after the first update, when gradients and optimizer states have been allocated."""
         if self._vram_checked or self.efficiency_meta is None or self.args.device.type != 'cuda':
             return
         self._vram_checked = True
@@ -72,7 +72,7 @@ def fit_with_efficiency(trainer, total_params, trainable_params):
     cuda = args.device.type == 'cuda'
     meta = dict(
         training_method='lora' if args.use_lora else 'full',
-        # 记录是哪个底座和哪套 LoRA 配置，便于效率汇总文件之间对照
+        # Record the backbone and LoRA configuration for comparisons.
         LM_path=str(args.LM_path), model_scale=args.model_scale, dataset=args.dataset,
         lora_r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout,
         lora_target_modules=args.lora_target_modules, lora_bias='all', learning_rate=args.learning_rate,

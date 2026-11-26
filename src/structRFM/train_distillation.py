@@ -2,7 +2,7 @@ import os
 import random
 import argparse
 from datetime import datetime
-#！！树状动态权重中使用 tanh
+# Use tanh for tree-based adaptive weights.
 import math
 import torch
 import torch.nn as nn
@@ -16,7 +16,7 @@ from .data import get_mlm_tokenizer, get_ar_tokenizer, preprocess_and_load_datas
 import warnings
 from transformers import EarlyStoppingCallback
 
-# 忽略冗余警告
+# Suppress redundant warnings.
 warnings.filterwarnings("ignore", category=FutureWarning, message="`tokenizer` is deprecated")
 warnings.filterwarnings("ignore", category=UserWarning, message="barrier\(\): using the device under current context")
 warnings.filterwarnings("ignore", category=UserWarning, message="Guessing device ID based on global rank")
@@ -26,25 +26,15 @@ class DistillMLMTrainer(Trainer):
         self,
         teacher_model_path,
         distill_temperature=2.0,
-        #！！新增：是否启用树状自适应蒸馏权重。
-        #！！默认 False，因此原来的30epoch/普通训练逻辑完全不受影响。
+        
+        
         use_tree_adaptive_weight=False,
         **kwargs
     ):
-        """
-        整合版蒸馏Trainer：
-        MLM损失 + 特征蒸馏损失 + 软标签蒸馏损失 + 全局关联蒸馏损失
-
-        :param teacher_model_path: 预训练教师模型路径
-        :param distill_temperature: 蒸馏温度（用于软标签KL损失）
-        :param use_tree_adaptive_weight:
-            False -> 原始四目标等权训练
-            True  -> 启用树状结构约束的动态蒸馏权重
-        :param kwargs: Trainer原有参数
-        """
+        """Initialize MLM and feature, soft-label, and relation distillation. teacher_model_path selects the pretrained teacher; distill_temperature controls soft-label KL. use_tree_adaptive_weight enables tree-constrained adaptive weights; otherwise use equal weights."""
         super().__init__(**kwargs)
 
-        # 1. 加载教师模型（768维）
+        # Load the 768-dimensional teacher.
         self.teacher_tokenizer = get_mlm_tokenizer(max_length=514)
         self.teacher_model = get_structRFM(
             dim=768,
@@ -56,7 +46,7 @@ class DistillMLMTrainer(Trainer):
             output_hidden_states=True
         )
 
-        # 教师模型配置：评估模式+冻结+设备对齐
+        # Freeze the teacher, use evaluation mode, and align its device.
         self.teacher_model.eval()
         for param in self.teacher_model.parameters():
             param.requires_grad = False
@@ -73,89 +63,89 @@ class DistillMLMTrainer(Trainer):
             torch.distributed.barrier()
             self.teacher_model = self._sync_teacher_model_across_processes()
 
-        # 2. 学生特征上采样层（384→768）
-        #！！关键修改：
-        #！！如果40epoch模型中已经存在训练好的feature_up_sample，
-        #！！这里直接复用，绝不能重新随机初始化覆盖。
+        # Project student features from 384 to 768 dimensions.
+        
+        
+        
         if hasattr(self.model, 'feature_up_sample'):
             self.model.feature_up_sample = self.model.feature_up_sample.to(self.args.device)
             print("\n✅ 检测到已有 feature_up_sample，直接继承 checkpoint 中的权重，不重新初始化")
         else:
-            #！！只有模型本身不存在该层时才新建。
+            # Create the projection only if it is absent.
             self.model.feature_up_sample = nn.Linear(384, 768).to(self.args.device)
             print("\n⚠️ 模型中不存在 feature_up_sample，已重新创建 nn.Linear(384, 768)")
 
         self.feature_up_sample = self.model.feature_up_sample
 
-        # 3. 损失函数定义
+        # Define the loss functions.
         self.mlm_loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
         self.feature_loss_fct = nn.MSELoss(reduction='mean')
         self.soft_loss_fct = nn.KLDivLoss(reduction='batchmean')
         self.global_sim_loss_fct = nn.MSELoss(reduction='mean')
 
-        # 4. 蒸馏温度（固定值）
+        # Fixed distillation temperature.
         self.distill_temperature = distill_temperature
         self.device = self.args.device
 
         #！！============================================================
-        #！！5. 树状自适应蒸馏权重初始化
+        # Initialize tree-based adaptive distillation weights.
         #！！============================================================
 
         self.use_tree_adaptive_weight = use_tree_adaptive_weight
 
-        #！！前50个训练batch用于建立固定baseline。
+        # Use the first 50 training batches to establish a fixed baseline.
         self.adaptive_warmup_batches = 50
 
-        #！！EMA平滑系数。
+        # EMA smoothing coefficient.
         self.adaptive_ema_beta = 0.99
 
-        #！！仅防止除零。
+        # Prevent division by zero.
         self.adaptive_eps = 1e-8
 
-        #！！Feature根节点连接Relation和Output两个分支，因此d_f=2。
+        # The feature root has two branches: relation and output (degree 2).
         self.adaptive_root_degree = 2
 
-        #！！记录“本次新的adaptive训练阶段”已经经历多少个训练batch。
-        #！！只统计training batch，不统计evaluation batch。
+        
+        # Count training batches only, excluding evaluation.
         self.adaptive_train_batch_count = 0
 
-        #！！前50个batch累计原始未加权KD loss，用于建立baseline。
+        # Accumulate unweighted KD losses during baseline warmup.
         self.adaptive_baseline_sum = {
             'feature': 0.0,
             'relation': 0.0,
             'output': 0.0,
         }
 
-        #！！B_i只会在前50batch结束时计算一次。
-        #！！一旦建立，此后整个训练过程永久不更新。
+        # Compute each baseline once, after warmup.
+        # Keep the baseline fixed after initialization.
         self.adaptive_baseline = {
             'feature': None,
             'relation': None,
             'output': None,
         }
 
-        #！！EMA平滑loss，每个训练batch都会更新。
+        # Update smoothed losses on every training batch.
         self.adaptive_ema = {
             'feature': None,
             'relation': None,
             'output': None,
         }
 
-        #！！当前归一化状态q_i。
+        # Normalized loss state q_i.
         self.adaptive_q = {
             'feature': 1.0,
             'relation': 1.0,
             'output': 1.0,
         }
 
-        #！！两条树边上的预算偏移tau。
+        # Budget offsets for the two tree edges.
         self.adaptive_tau = {
             'relation': 0.0,
             'output': 0.0,
         }
 
-        #！！当前训练batch使用的三个KD权重。
-        #！！初始阶段完全保持原来的1:1:1。
+        # KD weights used for the current training batch.
+        # Start with equal KD weights (1:1:1).
         self.adaptive_lambda = {
             'feature': 1.0,
             'relation': 1.0,
@@ -172,7 +162,7 @@ class DistillMLMTrainer(Trainer):
             print("   MLM权重始终固定为1.0")
             print("=" * 70 + "\n")
 
-        # 6. 权重监控（诊断用）
+        # Monitor parameter and adaptive-weight changes.
         self.weight_monitor = {
             'initial_weight': self.feature_up_sample.weight.data.clone().detach(),
             'initial_bias': (
@@ -201,14 +191,14 @@ class DistillMLMTrainer(Trainer):
         print("=" * 70 + "\n")
 
     def _sync_teacher_model_across_processes(self):
-        """同步教师模型参数到所有进程"""
+        """Synchronize teacher parameters across distributed processes."""
         for param in self.teacher_model.parameters():
             torch.distributed.broadcast(param.data, src=0)
         return self.teacher_model
 
     #！！============================================================
-    #！！新增：DDP情况下，将各GPU上的raw loss求平均。
-    #！！这只用于动态权重统计，不影响各GPU自己的反向传播loss。
+    
+    # Keep local losses unchanged for backpropagation.
     #！！============================================================
     def _get_adaptive_stat_value(self, loss):
         value = loss.detach().float().clone()
@@ -223,14 +213,14 @@ class DistillMLMTrainer(Trainer):
         return value.item()
 
     #！！============================================================
-    #！！新增：更新树状自适应权重状态。
+    
     #！！
-    #！！注意：
-    #！！1. 输入的都是原始未加权loss。
-    #！！2. B_i只计算一次，以后永久固定。
-    #！！3. EMA每个训练batch更新。
-    #！！4. 当前batch计算出的状态决定“下一batch”的权重。
-    #！！5. lambda每次从1重新计算，不在旧lambda上累加。
+    
+    # Inputs are unweighted losses.
+    # Compute each baseline once and keep it fixed.
+    # Update the EMA on each training batch.
+    # Use the updated state to determine the next batch's weights.
+    # Recompute weights from one rather than accumulating offsets.
     #！！============================================================
     def _update_tree_adaptive_state(
         self,
@@ -241,7 +231,7 @@ class DistillMLMTrainer(Trainer):
         if not self.use_tree_adaptive_weight:
             return
 
-        #！！先取得用于统计的全局平均raw loss。
+        # Obtain globally averaged unweighted losses.
         feature_value = self._get_adaptive_stat_value(feature_loss)
         relation_value = self._get_adaptive_stat_value(relation_loss)
         output_value = self._get_adaptive_stat_value(output_loss)
@@ -252,26 +242,26 @@ class DistillMLMTrainer(Trainer):
             'output': output_value,
         }
 
-        # 修改原因：禁止 NaN/Inf 污染固定 baseline、EMA 和后续权重；修改时间：2026-10-09。
-        # 在全卡统计完成后、任何状态修改之前检查，使 DDP 各卡一致报错。
+        
+        # Validate after aggregation and before changing state on every DDP rank.
         if not all(math.isfinite(value) for value in current_losses.values()):
             raise FloatingPointError(
                 f"KD loss 出现 NaN/Inf，已停止更新自适应状态：{current_losses}"
             )
 
-        #！！只统计真正的training batch。
+        # Update statistics only for training batches.
         self.adaptive_train_batch_count += 1
         t = self.adaptive_train_batch_count
 
         #！！--------------------------------------------------------
-        #！！阶段1：前W个batch维持1:1:1，只统计baseline。
+        # Warmup: use equal weights while collecting baseline losses.
         #！！--------------------------------------------------------
         if t <= self.adaptive_warmup_batches:
 
             for key in current_losses:
                 self.adaptive_baseline_sum[key] += current_losses[key]
 
-            #！！第W个batch结束时，一次性建立固定B_i。
+            # Initialize fixed baselines at the end of warmup.
             if t == self.adaptive_warmup_batches:
 
                 for key in current_losses:
@@ -280,13 +270,13 @@ class DistillMLMTrainer(Trainer):
                         / self.adaptive_warmup_batches
                     )
 
-                    #！！B_i从这里开始永久固定。
+                    # Keep baselines fixed from this point onward.
                     self.adaptive_baseline[key] = baseline
 
-                    #！！EMA的初值直接设为对应baseline。
+                    # Initialize each EMA from its baseline.
                     self.adaptive_ema[key] = baseline
 
-                    #！！baseline建立时q_i=1。
+                    # Initialize normalized losses to one.
                     self.adaptive_q[key] = 1.0
 
                 print("\n" + "=" * 70)
@@ -306,7 +296,7 @@ class DistillMLMTrainer(Trainer):
                 print("   注意：三个B_i从现在开始永久固定，不再更新")
                 print("=" * 70 + "\n")
 
-            #！！warmup期间始终保持原始等权。
+            # Keep equal weights throughout warmup.
             self.adaptive_lambda['feature'] = 1.0
             self.adaptive_lambda['relation'] = 1.0
             self.adaptive_lambda['output'] = 1.0
@@ -317,19 +307,19 @@ class DistillMLMTrainer(Trainer):
             return
 
         #！！--------------------------------------------------------
-        #！！阶段2：第W+1个训练batch以后开始EMA和动态权重。
+        # After warmup, update the EMA and adaptive weights.
         #！！--------------------------------------------------------
 
         beta = self.adaptive_ema_beta
 
-        #！！EMA每个训练batch更新。
+        # Update the EMA on each training batch.
         for key in current_losses:
             self.adaptive_ema[key] = (
                 beta * self.adaptive_ema[key]
                 + (1.0 - beta) * current_losses[key]
             )
 
-        #！！q_i = 当前平滑loss / 固定baseline。
+        # q_i = smoothed loss / fixed baseline.
         for key in current_losses:
             self.adaptive_q[key] = (
                 self.adaptive_ema[key]
@@ -343,24 +333,24 @@ class DistillMLMTrainer(Trainer):
         q_r = self.adaptive_q['relation']
         q_o = self.adaptive_q['output']
 
-        #！！只比较知识树上的两条边：
+        # Compare only the two edges in the knowledge tree.
         #！！Feature <-> Relation
         #！！Feature <-> Output
         delta_r = q_r - q_f
         delta_o = q_o - q_f
 
-        #！！根节点degree d_f=2，因此单边最大预算容量为1/2。
+        # Root degree 2 limits each edge's budget capacity to 1/2.
         edge_capacity = 1.0 / self.adaptive_root_degree
 
-        #！！树边预算偏移。
+        # Compute budget offsets along the tree edges.
         tau_r = edge_capacity * math.tanh(delta_r)
         tau_o = edge_capacity * math.tanh(delta_o)
 
         self.adaptive_tau['relation'] = tau_r
         self.adaptive_tau['output'] = tau_o
 
-        #！！每一次都从等权基准1重新计算。
-        #！！绝不是 lambda(t+1) = lambda(t) + tau。
+        # Recompute from the equal-weight baseline of one.
+        # Do not accumulate offsets across batches.
         lambda_r = 1.0 + tau_r
         lambda_o = 1.0 + tau_o
         lambda_f = 1.0 - tau_r - tau_o
@@ -370,14 +360,10 @@ class DistillMLMTrainer(Trainer):
         self.adaptive_lambda['output'] = lambda_o
 
     def _compute_cosine_sim_matrix(self, features):
-        """
-        计算余弦相似度矩阵（按你的要求：不额外做归一化操作）
-        :param features: [bs, max_len, dim] 特征矩阵
-        :return: [bs, max_len, max_len] 余弦相似度矩阵
-        """
-        # 修改原因：FP16 点积和范数乘积可能溢出，clamp 无法修复 Inf/Inf；修改时间：2026-10-09。
-        # 局部关闭 autocast 并转 FP32，保留原余弦公式、梯度和分母下限。
-        # 仅 .float() 不够：外层 autocast 仍可能把 matmul 降回半精度。
+        """Compute pairwise cosine similarities from [batch, length, dim] features."""
+        
+        # Disable autocast locally and compute cosine similarity in FP32.
+        # Casting alone is insufficient: autocast may lower matmul precision.
         with torch.autocast(device_type=features.device.type, enabled=False):
             features_fp32 = features.float()
             dot_product = torch.matmul(
@@ -400,37 +386,34 @@ class DistillMLMTrainer(Trainer):
         return_outputs=False,
         num_items_in_batch=None
     ):
-        """
-        重写损失计算：
-        MLM损失 + 特征蒸馏损失 + 软标签蒸馏损失 + 全局关联蒸馏损失
-        """
+        """Combine MLM, feature, soft-label, and global relation distillation losses."""
 
         if self.state.global_step == 0:
             self.show_optimizer_params()
 
-        # 1. 设备对齐
+        # Align model and input devices.
         labels = inputs.pop("labels").to(self.device)
         student_inputs = {
             k: v.to(self.device)
             for k, v in inputs.items()
         }
 
-        # 2. 学生模型前向传播
+        # Run the student forward pass.
         student_outputs = model(**student_inputs)
         student_logits = student_outputs.logits
         student_last_hidden = student_outputs.hidden_states[-1]
 
-        # 3. 教师模型前向传播
+        # Run the teacher forward pass.
         with torch.no_grad():
             teacher_outputs = self.teacher_model(**student_inputs)
             teacher_logits = teacher_outputs.logits
             teacher_last_hidden = teacher_outputs.hidden_states[-1]
 
-        # 4. 分离mask/可见部分
+        # Separate masked and visible tokens.
         mask_pos = labels.view(-1) != -100
         visible_pos = labels.view(-1) == -100
 
-        # 5. 初始化各损失
+        # Initialize loss components.
         mlm_loss = torch.tensor(
             0.0,
             device=self.device
@@ -448,7 +431,7 @@ class DistillMLMTrainer(Trainer):
             device=self.device
         )
 
-        # 6. Mask部分：MLM + soft KD
+        # Masked tokens: MLM and soft-label distillation.
         if mask_pos.any():
 
             student_logits_mask = student_logits.view(
@@ -498,7 +481,7 @@ class DistillMLMTrainer(Trainer):
                 requires_grad=True
             )
 
-        # 7. 可见部分：特征蒸馏损失
+        # Visible tokens: feature distillation.
         if visible_pos.any():
 
             student_hidden_up = self.feature_up_sample(
@@ -528,7 +511,7 @@ class DistillMLMTrainer(Trainer):
                 requires_grad=True
             )
 
-        # 8. 全局关联蒸馏损失
+        # Global relation distillation loss.
         student_sim_matrix = self._compute_cosine_sim_matrix(
             student_last_hidden
         )
@@ -543,16 +526,16 @@ class DistillMLMTrainer(Trainer):
         )
 
         #！！========================================================
-        #！！9. 根据当前训练状态取得“本batch实际使用”的权重。
+        # Select the weights for the current batch.
         #！！
-        #！！训练阶段：
-        #！！  前50batch是1:1:1；
-        #！！  此后使用上一batch计算得到的动态权重。
+        
+        
+        
         #！！
-        #！！验证阶段：
-        #！！  保持原始1:1:1。
-        #！！  同时绝不更新B_i、EMA或lambda。
-        #！！这样eval_loss的定义和原来保持一致。
+        
+        # Use equal distillation weights during evaluation.
+        # Do not update baselines, EMA state, or weights during evaluation.
+        
         #！！========================================================
         if self.use_tree_adaptive_weight and model.training:
             lambda_f_used = self.adaptive_lambda['feature']
@@ -564,9 +547,9 @@ class DistillMLMTrainer(Trainer):
             lambda_o_used = 1.0
 
         #！！========================================================
-        #！！10. 总损失。
-        #！！只有这里改变了原来的四目标等权组合。
-        #！！MLM始终固定为1。
+        # Combine the loss components.
+        
+        # Keep the MLM loss weight fixed at one.
         #！！========================================================
         total_loss = (
             mlm_loss
@@ -575,9 +558,9 @@ class DistillMLMTrainer(Trainer):
             + lambda_r_used * global_sim_loss
         )
 
-        # 修改原因：异常 loss 不能继续反传或写入自适应状态；修改时间：2026-10-09。
-        # 训练时同步异常标记，避免仅某张卡退出、其他卡卡在后续 collective。
-        # 验证时只做本地检查，不引入额外的跨卡 batch 同步。
+        
+        # Synchronize invalid-loss flags to prevent DDP collective hangs.
+        # Check evaluation losses locally without extra cross-rank synchronization.
         loss_values = torch.stack([
             mlm_loss.detach().float(), feature_loss.detach().float(),
             soft_loss.detach().float(), global_sim_loss.detach().float(),
@@ -595,11 +578,11 @@ class DistillMLMTrainer(Trainer):
             )
 
         #！！========================================================
-        #！！11. 当前训练batch结束后，
-        #！！使用“raw loss”更新状态并计算下一batch权重。
+        
+        # Use the updated state to determine the next batch's weights.
         #！！
-        #！！注意这里传入的不是 lambda_i * L_i，
-        #！！而是原始未加权L_i。
+        # Update statistics from raw losses, not weighted losses.
+        # Use the original unweighted loss L_i.
         #！！========================================================
         if self.use_tree_adaptive_weight and model.training:
             self._update_tree_adaptive_state(
@@ -608,7 +591,7 @@ class DistillMLMTrainer(Trainer):
                 output_loss=soft_loss
             )
 
-        # 12. 权重监控（原有逻辑）
+        
         if (
             feature_loss.item() > 0
             and self.weight_monitor.get(
@@ -633,7 +616,7 @@ class DistillMLMTrainer(Trainer):
             )
             print("=" * 60 + "\n")
 
-        # 原有诊断逻辑
+        
         if (
             self.state.global_step % 50 == 0
             and is_main_process(self.args.local_rank)
@@ -663,7 +646,7 @@ class DistillMLMTrainer(Trainer):
                     ]
                 })
 
-        # 13. 日志打印
+        
         if (
             self.state.global_step % 500 == 0
             and is_main_process(self.args.local_rank)
@@ -677,17 +660,17 @@ class DistillMLMTrainer(Trainer):
                 "gpu_rank": self.args.local_rank
             }
 
-            #！！新增：动态权重监控。
+            
             if self.use_tree_adaptive_weight:
 
-                #！！当前这个batch真正使用的权重。
+                # Weights used by the current batch.
                 debug_info.update({
                     "lambda_feature_used": lambda_f_used,
                     "lambda_relation_used": lambda_r_used,
                     "lambda_output_used": lambda_o_used,
                 })
 
-                #！！当前batch结束后计算出的、下一batch将使用的权重。
+                # Use the updated state to determine the next batch's weights.
                 debug_info.update({
                     "lambda_feature_next":
                         self.adaptive_lambda['feature'],
@@ -720,7 +703,7 @@ class DistillMLMTrainer(Trainer):
             else total_loss
         )
 
-    # 查看优化器中有哪些参数会被更新
+    # Inspect parameters included in the optimizer.
     def show_optimizer_params(self):
         print("\n===== 优化器中可训练的参数列表 =====")
 
@@ -760,7 +743,7 @@ def parse_args():
     parser.add_argument('--max_length', type=int, default=514)
     parser.add_argument('--seed', type=int, default=42)
 
-    # 模型参数（学生模型384维，教师768维）
+    # Model dimensions: student 384, teacher 768.
     parser.add_argument('--dim', type=int, default=384, help='学生模型hidden dim（384）')
     parser.add_argument('--layer', type=int, default=6)
     parser.add_argument('--num_attention_heads', type=int, default=6)
@@ -768,7 +751,7 @@ def parse_args():
     parser.add_argument('--from_pretrained', type=str, help='for model')
     parser.add_argument('--resume_from_checkpoint', type=str)
 
-    # 训练参数
+    # Training arguments.
     parser.add_argument('--use_DDP', type=bool, default=True)
     parser.add_argument('--lr', type=float, default=0.0002)
     parser.add_argument('--epoch', type=int, default=30)
@@ -776,7 +759,7 @@ def parse_args():
     parser.add_argument('--mlm_structure', action='store_true',
                         help=argparse.SUPPRESS)
 
-    # 蒸馏参数
+    # Distillation arguments.
     parser.add_argument('--teacher_model_path', type=str, default='model/structRFM_86M', help='预训练教师模型路径（768维）')
     parser.add_argument('--distill_temperature', type=float, default=2.0, help='软标签蒸馏温度（固定值）')
     parser.add_argument('--use_tree_adaptive_weight', action='store_true',
@@ -804,7 +787,7 @@ def pretrain(args, tag):
         
     model = None
     if tag == 'mlm':
-        # 学生模型：384维，开启hidden_states输出
+        # Enable hidden-state outputs for the 384-dimensional student.
         model = get_structRFM(dim=args.dim, layer=args.layer, num_attention_heads=args.num_attention_heads,
                               from_pretrained=None, tokenizer=tokenizer, max_length=args.max_length,  output_hidden_states=True)
         model_name = 'structRFM'
@@ -825,7 +808,7 @@ def pretrain(args, tag):
             split_dataset = dataset['train'].train_test_split(test_size=0.05, seed=args.seed)
     print(split_dataset)
 
-    # 打印数据集统计
+    
     print("="*50)
     print("数据集各子集条数统计：")
     for split_name in split_dataset.keys():
@@ -839,7 +822,7 @@ def pretrain(args, tag):
     if tag == 'mlm':
         print('MLM masking: standard random masking')
 
-    # 训练参数（保持原有逻辑）
+    
     
 
     training_args = TrainingArguments(
@@ -865,7 +848,7 @@ def pretrain(args, tag):
         local_rank=int(os.environ.get("LOCAL_RANK", -1)),
     )
     
-    # 早停回调
+    # Early stopping callback.
     early_stopping_callback = EarlyStoppingCallback(
         early_stopping_patience=5,
         early_stopping_threshold=0.001
@@ -873,10 +856,10 @@ def pretrain(args, tag):
     my_callbacks = [early_stopping_callback]
 
     if tag == 'mlm' and args.teacher_model_path:
-        # 使用整合后的蒸馏Trainer
+        
         trainer = DistillMLMTrainer(
             teacher_model_path=args.teacher_model_path,
-            distill_temperature=args.distill_temperature,  # 传入蒸馏温度
+            distill_temperature=args.distill_temperature,  # Fixed distillation temperature.
             use_tree_adaptive_weight=args.use_tree_adaptive_weight,
             model=model, 
             args=training_args,
@@ -906,7 +889,7 @@ def pretrain(args, tag):
     else:
         trainer.train()
 
-    # ✅ 训练完成后的权重变化报告
+    
     if hasattr(trainer, 'weight_monitor'):
         print("\n" + "="*70)
         print("🎯 训练完成 - Feature Upsampler 权重变化报告")
@@ -914,7 +897,7 @@ def pretrain(args, tag):
 
         monitor = trainer.weight_monitor
 
-        # 最终权重变化 - 从模型中访问（因为现在上采样层在模型中）
+        
         final_weight = trainer.model.feature_up_sample.weight.data
         total_weight_change = torch.norm(final_weight - monitor['initial_weight']).item()
 
@@ -928,7 +911,7 @@ def pretrain(args, tag):
             print(f"\n📈 监控记录（每50步）：")
             print(f"   {'Step':<8} {'Weight Change':<15} {'Weight Range':<30}")
             print(f"   {'-'*55}")
-            for record in monitor['weight_updates'][-10:]:  # 打印最后10条记录
+            for record in monitor['weight_updates'][-10:]:  # Print the last ten records.
                 w_min, w_max = record['current_weight_range']
                 print(f"   {record['step']:<8} {record['weight_change']:<15.6f} [{w_min:.6f}, {w_max:.6f}]")
 
@@ -936,7 +919,7 @@ def pretrain(args, tag):
             print(f"\n🔄 梯度范数（每50步）：")
             print(f"   {'Step':<8} {'Grad Norm':<15}")
             print(f"   {'-'*25}")
-            for record in monitor['grad_norms'][-10:]:  # 打印最后10条记录
+            for record in monitor['grad_norms'][-10:]:  # Print the last ten records.
                 print(f"   {record['step']:<8} {record['grad_norm']:<15.6f}")
 
         print("\n" + "="*70 + "\n")

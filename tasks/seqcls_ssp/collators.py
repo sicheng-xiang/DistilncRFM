@@ -46,7 +46,7 @@ class SeqClsCollator(BaseCollator):
 
         input_ids_stack = []
         labels_stack = []
-        # 修改原因：新增 attention_mask（PAD 位置为 0）供全量微调使用；旧 LoRA 训练器不读取该键，行为不变；修改时间：2026-11-09
+        
         mask_stack = []
 
         for i_batch in range(len(input_ids_b)):
@@ -63,7 +63,7 @@ class SeqClsCollator(BaseCollator):
             input_ids_stack.append(input_ids)
             labels_stack.append(label)
 
-        # 修改原因：Windows 上 np.stack 的整数默认为 int32（Linux 为 int64），CUDA 交叉熵不支持 int32 标签而报错，统一转 int64 与服务器一致；修改时间：2026-11-09
+        
         return {
             "input_ids": torch.from_numpy(self.stack_fn(input_ids_stack)).long(),
             "attention_mask": torch.from_numpy(self.stack_fn(mask_stack)).long(),

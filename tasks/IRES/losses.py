@@ -6,20 +6,17 @@ import torch.nn.functional as F
 class SeqClsLoss(nn.Module):
     def __init__(self, pos_weight=2.0):
         super(SeqClsLoss, self).__init__()
-        # 给正样本更高权重（IRES 二分类专用）
-        # 你的数据：负样本多 → 正类权重设 2.0~3.0 最好
-        # 修改原因：标签0为负类、1为正类，纠正加权方向并注册设备缓冲区；修改时间：2026-10-15
+        # Assign a larger loss weight to the positive class.
+        
+        
         self.register_buffer("pos_weight", torch.tensor([1.0, pos_weight]))
 
     def forward(self, outputs, labels):
-        """
-        outputs: 模型输出 [B, 2]
-        labels: 真实标签 [B]
-        """
-        # 移动到相同设备
+        """Compute classification loss from logits [B, 2] and labels [B]."""
+        # Move class weights to the logits device.
         weight = self.pos_weight.to(outputs.device)
         
-        # 加权交叉熵，解决样本不平衡
+        # Weighted cross-entropy for class imbalance.
         loss = F.cross_entropy(outputs, labels, weight=weight)
         return loss
 

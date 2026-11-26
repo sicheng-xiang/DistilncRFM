@@ -1,13 +1,6 @@
-# 修改原因：新增全量微调效率测评（显存峰值、吞吐量 batch/s、耗时），只统计本训练进程；修改时间：2026-11-09
-# 修改原因：支持梯度累积，batch/s 按有效 batch（一次参数更新）计数，便于不同 batch 设置的模型直接比较；修改时间：2026-11-09
-"""训练效率测量工具。
 
-显存：torch.cuda.max_memory_allocated / max_memory_reserved 只统计本进程 PyTorch 分配器，
-      不含后台其他程序；也不含 CUDA context、驱动等固定开销，因此 nvidia-smi 看到的数值会再多几百 MB。
-      allocated = 张量实际占用；reserved = 分配器向驱动申请并持有的显存（含缓存碎片），更接近进程真实占用。
-时间：阶段开始和结束各调用一次 torch.cuda.synchronize()，确保异步执行的 GPU 计算全部计入。
-吞吐量：1 batch = 一次参数更新所用的有效 batch（batch_size × gradient_accumulation_steps 条样本）。
-"""
+
+"""Training efficiency utilities. CUDA allocator peaks exclude other processes and driver/context overhead; reserved includes cache. Synchronize phase boundaries for timing. Effective batch throughput counts optimizer updates, including gradient accumulation."""
 import json
 import os
 import time
@@ -18,10 +11,7 @@ MB = 1024 ** 2
 
 
 class Phase:
-    """统计一个阶段的耗时和显存峰值：
-    with Phase(device) as p: ...
-    之后读取 p.seconds、p.peak_allocated_mb、p.peak_reserved_mb（CPU 上显存项为 None）。
-    """
+    """Measure elapsed time and allocator peaks for a phase. CUDA memory fields are None on CPU."""
 
     def __init__(self, device):
         self.device = torch.device(device)
@@ -53,8 +43,7 @@ def _sum(rows, key):
 
 
 def vram_warning(meta, peak_reserved_mb):
-    """本进程显存需求超过可用显存时返回警告文字。Windows 驱动默认此时借用系统内存（Sysmem Fallback），
-    不会报 OOM，但训练会慢一两个数量级，耗时与吞吐量失去意义。"""
+    """Warn when allocator demand exceeds initially available VRAM; system-memory fallback may distort timing."""
     if peak_reserved_mb is None:
         return None
     total, free0 = meta.get('gpu_total_memory_mb'), meta.get('free_vram_at_start_mb')
@@ -71,7 +60,7 @@ def vram_warning(meta, peak_reserved_mb):
 
 
 def summarize(rows, total_wall_time_s, meta):
-    """汇总各轮记录（rows 为 trainer 每轮写入的字典）。"""
+    """Summarize per-epoch trainer records."""
     train_time = _sum(rows, 'train_time_s')
     later = rows[1:]
     peak_reserved = _max(rows, 'train_peak_reserved_mb')
@@ -79,11 +68,11 @@ def summarize(rows, total_wall_time_s, meta):
     return dict(
         meta,
         epochs_completed=len(rows),
-        # 第1轮训练开始 → 最后一轮测试评估及保存结束（不含加载模型/数据的准备时间）
+        # Time from the first training epoch through final evaluation and saving; exclude setup.
         total_wall_time_s=total_wall_time_s,
-        # 仅训练阶段：取 batch + 前向 + 反向传播 + 优化器更新
+        # Training time includes data loading, forward, backward, and optimizer updates.
         train_time_s=train_time,
-        # 仅测试集前向推理
+        # Test-set forward inference only.
         eval_time_s=_sum(rows, 'eval_time_s'),
         mean_epoch_train_time_s=train_time / len(rows),
         mean_epoch_wall_time_s=_sum(rows, 'epoch_wall_time_s') / len(rows),
@@ -93,7 +82,7 @@ def summarize(rows, total_wall_time_s, meta):
         throughput_batch_per_s=_sum(rows, 'train_steps') / train_time,
         throughput_micro_batch_per_s=_sum(rows, 'train_micro_batches') / train_time,
         throughput_samples_per_s=_sum(rows, 'train_samples') / train_time,
-        # 第1轮含 cuBLAS 初始化、分配器扩容等预热开销，另给出去掉第1轮后的稳态吞吐
+        # Also report throughput excluding first-epoch initialization and allocator warmup.
         throughput_batch_per_s_excl_epoch1=(_sum(later, 'train_steps') / _sum(later, 'train_time_s')) if later else None,
         train_peak_allocated_mb=_max(rows, 'train_peak_allocated_mb'),
         train_peak_reserved_mb=peak_reserved,
@@ -105,7 +94,7 @@ def summarize(rows, total_wall_time_s, meta):
 
 
 def write_efficiency(output_dir, rows, total_wall_time_s, meta):
-    """每轮结束后调用；中途中断时已完成轮次的记录仍保留。"""
+    """Persist completed epoch records, including partial runs."""
     import pandas as pd
     pd.DataFrame(rows).to_csv(os.path.join(output_dir, 'epoch_log.csv'), index=False)
     summary = summarize(rows, total_wall_time_s, meta)

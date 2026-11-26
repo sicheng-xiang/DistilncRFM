@@ -9,22 +9,22 @@ from transformers import LlamaForCausalLM, LlamaModel, BertForMaskedLM
 # BertForPretraining: model.get_pool_output,  model.get_sequence_output
 class HFCompatibleConfig:
     def __init__(self, **kwargs):
-        # 初始化属性
+        # Initialize configuration attributes.
         self.__dict__.update(kwargs)
-        # 默认值（避免Peft访问其他属性时报错）
-        self.tie_word_embeddings = False  # Peft会访问的关键属性
-        self.use_return_dict = True       # 之前的核心属性
+        # Defaults for PEFT configuration access.
+        self.tie_word_embeddings = False  # Configuration attributes accessed by PEFT.
+        self.use_return_dict = True       
     
     def get(self, key, default=None):
-        # 实现字典的get方法，兼容Peft
+        # Support dictionary-style get access for PEFT.
         return getattr(self, key, default)
     
     def __getitem__(self, key):
-        # 实现字典的[]访问，额外兼容
+        # Support dictionary-style indexing.
         return getattr(self, key)
     
     def __contains__(self, key):
-        # 实现in判断
+        # Support membership tests.
         return hasattr(self, key)
 
 def get_model_scale(scale):
@@ -138,19 +138,19 @@ class structRFM_for_cls(nn.Module):
                 nn.Linear(in_features=dim, out_features=num_class),
         )
         self.config = HFCompatibleConfig(
-            use_return_dict=True,          # Peft必须的属性
-            tie_word_embeddings=False,     # 新增：Peft会调用get("tie_word_embeddings")
-            hidden_size=dim,               # 隐藏层维度
-            num_hidden_layers=layer,       # 层数
-            num_attention_heads=num_attention_heads,  # 注意力头数
-            max_position_embeddings=max_length,       # 最大序列长度
-            vocab_size=getattr(self.structRFM.bert.embeddings.word_embeddings, 'num_embeddings', 10),  # 匹配词表大小
-            num_labels=num_class           # 分类任务的类别数
+            use_return_dict=True,          # Attributes required by PEFT.
+            tie_word_embeddings=False,     
+            hidden_size=dim,               # Hidden dimension.
+            num_hidden_layers=layer,       
+            num_attention_heads=num_attention_heads,  # Number of attention heads.
+            max_position_embeddings=max_length,       # Maximum sequence length.
+            vocab_size=getattr(self.structRFM.bert.embeddings.word_embeddings, 'num_embeddings', 10),  # Match the vocabulary size.
+            num_labels=num_class           # Number of classification labels.
         )
         self.use_mean_feature = use_mean_feature
 
     def forward(self, input_ids, attention_mask=None, return_dict=True, **kwargs):
-        # 核心：忽略Peft传入的所有无用参数
+        # Ignore unused keyword arguments supplied by PEFT.
         ignore_kwargs = ["inputs_embeds", "token_type_ids", "position_ids", "head_mask", 
                          "encoder_hidden_states", "encoder_attention_mask", "past_key_values",
                          "use_cache", "output_attentions", "output_hidden_states"]

@@ -1,4 +1,4 @@
-# 修改原因：Windows 迁移，保持原模型与指标计算，仅调整路径和启动方式；修改时间：2026-11-09
+
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 import os
@@ -66,7 +66,7 @@ parser.add_argument('--dataset_dir', default=DATA_DIR)
 parser.add_argument('--batch_size', type=int, default=BATCH_SIZE)
 parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 parser.add_argument('--output_dir', default=None, help='默认写到 results/nrc_inference_<时间>，不覆盖旧结果')
-# 修改原因：支持评估全量微调 best_model（model_state.pt + run_config.json），不传则仍按原 LoRA 方式评估；修改时间：2026-11-09
+
 parser.add_argument('--checkpoint', default=None, help='全量微调的 best_model 目录；给定时忽略 --lora_path')
 from utils import str2bool
 parser.add_argument('--attention_mask', type=str2bool, default=False,
@@ -77,7 +77,7 @@ outdir = output_directory(ROOT, 'nrc', args.output_dir)
 
 
 def root_path(path):
-    """修改原因：与 run_seq_full_cls.py 统一，相对路径一律相对项目根目录，与启动目录无关；修改时间：2026-11-09"""
+    """Resolve relative paths against the project root."""
     p = Path(path).expanduser()
     return str((p if p.is_absolute() else ROOT / p).resolve())
 
@@ -179,7 +179,7 @@ print(f"Accuracy: {metrics_result['accuracy']:.4f}")
 print("="*50)
 
 
-# 修改原因：保存本机复算指标与预测，便于对照；修改时间：2026-11-09
+
 outdir.mkdir(parents=True, exist_ok=True)
 (outdir/'metrics.json').write_text(json.dumps(metrics_result, indent=2, default=float)+'\n', encoding='utf-8')
 np.savez(outdir/'predictions.npz', logits=outputsataset.detach().cpu().numpy(), labels=labels_dataset.cpu().numpy())

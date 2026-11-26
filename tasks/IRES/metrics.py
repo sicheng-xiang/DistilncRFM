@@ -5,7 +5,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score,f1_score
 from base_classes import BaseMetrics
 
 
-# 修改原因：统一CE对应的softmax分数、固定阈值和PR指标口径，禁止测试集调阈值；修改时间：2026-10-15
+
 class SeqClsMetrics(BaseMetrics):
     def __init__(self, metrics, threshold=0.5):
         super().__init__(metrics=metrics)

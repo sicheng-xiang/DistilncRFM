@@ -1,4 +1,4 @@
-# 修改原因：Windows 迁移，保持原模型与指标计算，仅调整路径和启动方式；修改时间：2026-11-09
+
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 import os
@@ -10,7 +10,7 @@ from torch.optim import AdamW
 from transformers import AutoTokenizer
 
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-# 修改原因：当前普通 LoRA 未使用 bnb，移除多余强制依赖；修改时间：2026-11-09
+
 
 import sys
 sys.path.insert(0, str(ROOT))
@@ -31,32 +31,32 @@ MODELS = ["structRFM"]
 MAX_SEQ_LEN = {"structRFM": 512}
 TASKS = ["lncRNA", "miRNA", "circRNA"]
 
-# 标签映射
+# Map label names to class IDs.
 LABEL2ID = {
-    # 修改原因：补齐 circRNA 核/质定位标签；修改时间：2026-10-14
+    
     "circRNA": {"nucleus": 0, "cytoplasm": 1},
     "lncRNA": {
         "nucleus": 0,
         "cytoplasm": 1
     },
     "miRNA": {
-        "intracellular": 1,  # Nucleus/Cytoplasm/Mitochondrion/Ribosome -> 细胞内
-        "extracellular": 0   # Exosome/Microvesicle/Extracellular -> 细胞外
+        "intracellular": 1,  # Nucleus, cytoplasm, mitochondrion, ribosome: intracellular.
+        "extracellular": 0   # Exosome, microvesicle, extracellular: extracellular.
     }
 }
 
 
-# ========== 参数解析 ==========
+
 def get_args():
     parser = argparse.ArgumentParser('circRNA Subcellular Localization with structRFM + LoRA')
     # model args
     parser.add_argument('--model_name', type=str, default="structRFM", choices=MODELS)
     parser.add_argument('--model_scale', type=str, choices=['base', 'large', 'small'], default='small')
     #parser.add_argument('--LM_path', type=str, default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM-EW')
-     #修改！
+     
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM-EW')
 
-    #10M学生
+    
     parser.add_argument('--LM_path', type=str,default=str(ROOT / 'model/structRFM_11M'))
 
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/autodl-tmp/structRFM-master2/model2/checkpoint-577854')
@@ -64,15 +64,15 @@ def get_args():
     
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/structRFM_86M')
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM')
-    # 数据参数
+    # Dataset arguments.
     parser.add_argument('--data_dir', type=str, default=str(ROOT / 'tasks/RNA subcellular localization prediction/RNALoc-LM-main/data'), help='数据目录')
-    # 修改原因：新脚本默认运行 circRNA 短序列实验，保留 lncRNA/miRNA 入口；修改时间：2026-10-14
+    
     parser.add_argument('--dataset', type=str, default="circRNA", choices=TASKS, help='数据集类型')
     parser.add_argument('--max_seq_len', type=int, default=512)
     parser.add_argument('--replace_T', type=bool, default=True)
     parser.add_argument('--replace_U', type=bool, default=False)
     
-    # 训练参数
+    # Training arguments.
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--dataloader_num_workers', type=int, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-5)
@@ -90,16 +90,16 @@ def get_args():
     parser.add_argument('--metrics', type=str2list, default="F1s,Precision,Recall,Accuracy,Mcc")
     parser.add_argument('--logging_steps', type=int, default=1000, help='日志打印间隔')
     
-    # LoRA参数
+    # LoRA arguments.
     parser.add_argument('--use_lora', type=str2bool, default=True)
     parser.add_argument('--lora_r', type=int, default=128)
     parser.add_argument('--lora_alpha', type=int, default=256)
     parser.add_argument('--lora_dropout', type=float, default=0.3)
-    parser.add_argument('--lora_target_modules', type=str, default="query,value,key,dense")  # 增加更多模块
+    parser.add_argument('--lora_target_modules', type=str, default="query,value,key,dense")  
     parser.add_argument('--load_in_4bit', type=str2bool, default=False)
     parser.add_argument('--bnb_4bit_quant_type', type=str, default="nf4")
     
-    # 保存参数
+    # Checkpoint arguments.
     parser.add_argument('--output_dir', type=str, default=None)
     parser.add_argument('--save_checkpoints', type=str2bool, default=False,
                         help='Efficiency tests skip duplicate adapters; true restores original saves.')
@@ -114,15 +114,15 @@ def get_args():
     return args
 
 
-# ========== 工具函数 ==========
+
 def freeze(model):
-    """冻结模型所有参数"""
+    """Freeze all model parameters."""
     for name, para in model.named_parameters():
         para.requires_grad = False
 
 
 def init_lora_model(model, args):
-    """适配structRFM的LoRA初始化"""
+    """Configure LoRA and attach adapters to the model."""
     if not args.use_lora:
         return model
     
@@ -168,7 +168,7 @@ def init_lora_model(model, args):
     return model
 
 
-# ========== 主函数 ==========
+
 if __name__ == "__main__":
     args = get_args()
     for key in ('LM_path', 'data_dir'):
@@ -187,12 +187,12 @@ if __name__ == "__main__":
         raise ValueError("This migration supports existing non-quantized LoRA runs only")
     print(args)
     
-    # 后处理参数
+    
     if args.max_seq_len == 0:
         args.max_seq_len = MAX_SEQ_LEN[args.model_name]
     assert args.replace_T ^ args.replace_U, "Only replace T or U."
 
-    # ========== 构建模型和分词器 ==========
+    
     from_pretrained = args.LM_path
     model_paras = get_model_scale(args.model_scale)
     print("!"*20)
@@ -221,7 +221,7 @@ if __name__ == "__main__":
             **model_paras
         )
     
-    # 应用LoRA
+    # Apply LoRA adapters.
     print('=== 应用LoRA前的模型结构 ===')
     print(model)
     if args.use_lora:
@@ -230,12 +230,12 @@ if __name__ == "__main__":
     print(model)
 
 
-    # ========== 设备配置 ==========
+    
     args.device = torch.device(args.device)
     # Single selected GPU, matching the other tasks' efficiency measurement scope.
     model.to(args.device)
     
-    # 打印参数统计
+    
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"\n===== 参数统计 =====")
@@ -243,31 +243,31 @@ if __name__ == "__main__":
     print(f"可训练参数: {trainable_params:,}")
     print(f"可训练占比: {trainable_params/total_params*100:.4f}%")
 
-    # ========== 损失函数/优化器/指标 ==========
-    # lncRNA: nucleus(636) vs cytoplasm(367), cytoplasm是少数类(标签1)
-    # miRNA: extracellular(675) vs intracellular(336), intracellular是少数类(标签1)
+    
+    # For lncRNA, cytoplasm (label 1) is the minority class.
+    # For miRNA, intracellular (label 1) is the minority class.
     # if args.dataset == "lncRNA":
     #     pos_weight = 1.8
     # else:  # miRNA
-    #     pos_weight = 2  # 降低权重尝试提升Precision
+    
     _loss_fn = SeqClsLoss(
         pos_weight=1.5,
         label_smoothing=0.1).to(args.device)
     
-    # ========== 输出目录 ==========
+    
     os.makedirs(args.output_dir, exist_ok=True)
     if args.use_lora:
         args.output_dir = os.path.join(args.output_dir, f"lora_r{args.lora_r}_alpha{args.lora_alpha}")
         os.makedirs(args.output_dir, exist_ok=True)
 
-    # ========== 加载数据集 ==========
+    
     dataset_train = RNADataset(
         data_dir=args.data_dir,
         dataset_type=args.dataset,
         prefix="train",
         tokenizer=tokenizer,
         seed=0,
-        # 修改原因：本实验只使用原始长度严格小于512 nt的序列；修改时间：2026-10-14
+        
         train=True,
         max_nt_exclusive=512
     )
@@ -278,21 +278,21 @@ if __name__ == "__main__":
         prefix="test",
         tokenizer=tokenizer,
         seed=0,
-        # 修改原因：测试集采用同样长度条件，报告的是短序列子集结果；修改时间：2026-10-14
+        
         train=False,
         max_nt_exclusive=512
     )
     print('\n===== 数据统计 =====')
     print(f'dataset train: {len(dataset_train)}, test: {len(dataset_eval)}')
     
-    # ========== 优化器和学习率调度器 =========-
+    # Cosine learning-rate schedule with warmup.
     optimizer = AdamW(
         params=[para for para in model.parameters() if para.requires_grad],
         lr=args.learning_rate,
         weight_decay=0.05
     )
     
-    # 学习率调度器 (cosine annealing with warmup)
+    # Cosine learning-rate schedule with warmup.
     updates_per_epoch = math.ceil(math.ceil(len(dataset_train) / args.batch_size) / args.gradient_accumulation_steps)
     num_training_steps = updates_per_epoch * args.num_train_epochs
     num_warmup_steps = int(updates_per_epoch * args.warmup_epochs)
@@ -311,7 +311,7 @@ if __name__ == "__main__":
     
     _metric = SeqClsMetrics(metrics=args.metrics)
 
-    # ========== 数据Collator ==========
+    
     _collate_fn = SeqClsCollator(
         max_seq_len=args.max_seq_len,
         tokenizer=tokenizer,
@@ -321,7 +321,7 @@ if __name__ == "__main__":
         is_structRFM=True
     )
 
-    # ========== 训练器 ==========
+    
     seq_cls_trainer = SeqClsTrainer(
         args=args,
         tokenizer=tokenizer,
@@ -335,6 +335,6 @@ if __name__ == "__main__":
         lr_scheduler=lr_scheduler,
     )
 
-    # ========== 训练/验证 ==========
+    
     if args.train:
         fit_custom(seq_cls_trainer, vars(args))

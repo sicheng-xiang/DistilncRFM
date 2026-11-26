@@ -106,34 +106,34 @@ class structRFM_infer:
             all_position_arrays = []
 
             for i in range(batch_size):
-                # 注意：这里使用掩码后的 input_ids
+                # Use masked input IDs.
                 input_ids = inputs["input_ids"][i]
 
-                # 调用您的方法计算 position_array
+                # Compute token position annotations.
                 position_array, motifs = find_motifs_in_masked_sequence(
                     input_ids,
                     self.motif_tree_dict
                 )
 
-                # 确保长度一致
+                # Align annotation and token lengths.
                 if len(position_array) != seq_len:
                     if len(position_array) < seq_len:
-                        # 填充
+                        # Pad to the required length.
                         padding = torch.zeros(seq_len - len(position_array),
                                               dtype=position_array.dtype)
                         position_array = torch.cat([position_array, padding])
                     else:
-                        # 截断
+                        # Truncate to the required length.
                         position_array = position_array[:seq_len]
 
                 all_position_arrays.append(position_array)
 
-            # 添加到批次
+            # Add annotations to the batch.
             inputs["position_array"] = torch.tensor(all_position_arrays)
             # print('!!!!!'*5)
             print(f"DEBUG: 添加 position_array: {inputs['position_array']}")
             # print('!!!!!' * 5)
-            #print(f"DEBUG: 添加 position_array，形状: {inputs['position_array'].shape}")
+            
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         attention = None
         outputs = self.model(**inputs, labels=inputs['input_ids'], output_attentions=output_attentions) if is_cal_loss else self.model(**inputs, output_attentions=output_attentions)

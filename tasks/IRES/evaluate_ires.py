@@ -1,12 +1,12 @@
-# 修改原因：独立第四版测试集选模诊断，保留原版与规范验证集实验；修改时间：2026-10-15
-# 原始来源：eval3.py（原文件保留）。
-# 修改原因：统一softmax与固定阈值，按训练配置加载，保存可复算预测，明确标记测试集选模；修改时间：2026-10-15
+
+
+
 import argparse
 import json
 from pathlib import Path
 import sys
 
-# 修改原因：迁移到 Windows 时按项目根目录解析路径，保留原实验计算；修改时间：2026-11-09
+
 from portable_paths import project_path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
@@ -28,7 +28,7 @@ def get_args():
 
 def main():
     args = get_args()
-    # 修改原因：Windows 下 pandas 自带旧版 msvcp140.dll(14.29)，先于 torch 导入会使 c10.dll 初始化失败(WinError 1114)，故先导入 torch；修改时间：2026-11-09
+    
     import torch
     import numpy as np
     import pandas as pd

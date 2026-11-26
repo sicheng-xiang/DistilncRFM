@@ -146,7 +146,7 @@ class SeqClsTrainer(BaseTrainer):
         if self.args.save_strategy not in ["epoch", True]:
             return
     
-        # 保存f1s最高的模型
+        # Save the checkpoint with the highest F1 score.
         current_metric = metrics.get("f1s", 0.0)
     
         best_f1s = self.max_metric

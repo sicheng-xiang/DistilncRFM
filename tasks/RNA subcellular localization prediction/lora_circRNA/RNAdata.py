@@ -10,52 +10,44 @@ from torch.utils.data import Dataset
 
 class RNADataset(Dataset):
     def __init__(self, data_dir, dataset_type, prefix, tokenizer, seed=0, train=True, max_nt_exclusive=None):
-        """
-        RNA数据集加载器
-        data_dir: 数据目录
-        dataset_type: 'lncRNA'、'miRNA' 或 'circRNA'
-        max_nt_exclusive: 只保留核苷酸长度严格小于此值的序列；None 不筛选
-        prefix: 'train' 或 'test'
-        tokenizer: 分词器
-        train: True=训练集, False=测试集
-        """
+        """Load RNA sequences and labels for lncRNA, miRNA, or circRNA. max_nt_exclusive optionally retains sequences shorter than the specified nucleotide length. prefix selects the train or test input split."""
         super(RNADataset, self).__init__()
 
         self.tokenizer = tokenizer
         self.seed = seed
         self.dataset_type = dataset_type
         
-        # 数据文件映射
+        # Map dataset names to input files.
         file_mapping = {
             "lncRNA": ("lncTrain.pkl", "lncTest.pkl"),
             "miRNA": ("miTrain.pkl", "miTest.pkl"),
-            # 修改原因：支持 circRNA 独立数据文件；修改时间：2026-10-14
+            
             "circRNA": ("circTrain.pkl", "circTest.pkl")
         }
         
         train_file, test_file = file_mapping[dataset_type]
         pkl_file = os.path.join(data_dir, train_file if train else test_file)
         
-        # 加载pickle数据
+        # Load serialized dataset records.
         with open(pkl_file, 'rb') as f:
             seqs = pickle.load(f)
             names = pickle.load(f)
             labels = pickle.load(f)
         
-        # 根据数据集类型处理标签
+        # Map labels for the selected dataset.
         self.data = []
         if dataset_type in ("lncRNA", "circRNA"):
             for seq, name, label in zip(seqs, names, labels):
                 label_str = "nucleus" if label == 0 else "cytoplasm"
                 self.data.append((seq, name, label_str))
         elif dataset_type == "miRNA":
-            # 标签映射: 0=extracellular(细胞外), 1=intracellular(细胞内)
+            # Labels: extracellular=0, intracellular=1.
             for seq, name, label in zip(seqs, names, labels):
                 label_str = "extracellular" if label == 0 else "intracellular"
                 self.data.append((seq, name, label_str))
         
-        # 修改原因：按原始 nt 长度筛选，避免将截断后的长序列当作短序列；修改时间：2026-10-14
-        # 默认不筛选，保持其他训练脚本的原有行为。
+        
+        
         if max_nt_exclusive is not None:
             before = len(self.data)
             self.data = [item for item in self.data if len(item[0]) < max_nt_exclusive]
@@ -65,11 +57,11 @@ class RNADataset(Dataset):
             if not self.data:
                 raise ValueError(f"{dataset_type} {split_name} 筛选后为空")
 
-        # 随机打乱
+        # Shuffle examples.
         np_rng = np.random.RandomState(seed=seed)
         np_rng.shuffle(self.data)
         
-        # 打印数据集信息
+        
         label_counts = {}
         for item in self.data:
             label = item[2]
@@ -93,7 +85,7 @@ class RNADataset(Dataset):
         return len(self.data)
 
 
-# 保留原LncRNADataset以兼容
+# Retain the LncRNADataset interface.
 class LncRNADataset(RNADataset):
     def __init__(self, data_dir, prefix, tokenizer, seed=0, train=True):
         super().__init__(data_dir, "lncRNA", prefix, tokenizer, seed, train)
@@ -117,31 +109,31 @@ class IRESDataset(Dataset):
         self.prefix = prefix
         self.tokenizer = tokenizer
 
-        # 区分 train / test
+        # Select the training or test split.
         split = "train" if train else "test"
         
-        # 正负样本文件路径
+        # Paths for positive and negative examples.
         pos_fa = osp.join(fasta_dir, split, "positive", f"positive_{split}_data.fa")
         neg_fa = osp.join(fasta_dir, split, "negative", f"negative_{split}_data.fa")
 
-        # 格式完全对齐原代码：(seq, name, label)
+        
         self.data = []
 
-        # 正样本 label = "1"
+        # Positive label = "1".
         for x in SeqIO.parse(pos_fa, "fasta"):
             seq = str(x.seq)
             name = x.description.split(" ")[0]
             label = "positive" 
             self.data.append((seq, name, label))
 
-        # 负样本 label = "0"
+        # Negative label = "0".
         for x in SeqIO.parse(neg_fa, "fasta"):
             seq = str(x.seq)
             name = x.description.split(" ")[0]
             label = "negative"
             self.data.append((seq, name, label))
 
-        # 随机打乱
+        # Shuffle examples.
         np_rng = np.random.RandomState(seed=seed)
         np_rng.shuffle(self.data)
 

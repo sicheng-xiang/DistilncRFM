@@ -1,5 +1,5 @@
 """IRES-only nucleotide mean pooling; shared structRFM implementation is untouched."""
-# 修改原因：旧[1:-1].mean会包含SEP/PAD；只对有效核苷酸求均值，并保持LoRA模块名称；修改时间：2026-10-15
+
 import torch
 
 

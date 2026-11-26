@@ -1,5 +1,5 @@
-# 修改原因：保留第四版，新增学生全量微调和按步评估入口；修改时间：2026-10-15
-# 修改原因：独立第四版测试集选模诊断，保留原版与规范验证集实验；修改时间：2026-10-15
+
+
 import os
 import argparse
 from datetime import datetime
@@ -7,21 +7,21 @@ import torch
 from torch.optim import AdamW
 from transformers import AutoTokenizer
 
-# ========== 新增LoRA相关导入 ==========
+
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 
 import sys
-# 修改原因：不依赖启动目录，确保导入本项目；修改时间：2026-10-15
+
 from pathlib import Path
-# 修改原因：迁移到 Windows 时按项目根目录解析路径，保留原实验计算；修改时间：2026-11-09
+
 from portable_paths import project_path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.structRFM.model import get_model_scale, get_structRFM_for_cls as get_cls_model
 from ires_mean_model import get_ires_mean_model
 from src.structRFM.data import get_mlm_tokenizer
 
-# 修改原因：新版入口仅引用修复副本，旧入口行为保持原样；修改时间：2026-10-15
+
 from utils import str2bool, str2list
 from collators import SeqClsCollator
 from losses import SeqClsLoss
@@ -29,10 +29,10 @@ from metrics import SeqClsMetrics
 from trainers import SeqClsTrainer
 from RNAdata import IRESDataset
 # ========== Define constants ==========
-MODELS = ["structRFM"]  # 仅保留structRFM
+MODELS = ["structRFM"]  
 MAX_SEQ_LEN = {"structRFM": 512}
 TASKS = ["IRES"]
-# IRES任务标签映射（2分类）
+# Binary IRES label mapping.
 LABEL2ID = {
     "IRES": {
         "negative": 0,
@@ -41,17 +41,17 @@ LABEL2ID = {
 }
 
 
-# ========== 参数解析 ==========
+
 def get_args():
     parser = argparse.ArgumentParser('IRES Identification with structRFM + LoRA')
     # model args
     parser.add_argument('--model_name', type=str, default="structRFM", choices=MODELS)
     parser.add_argument('--model_scale', type=str, choices=['base', 'large','small'], default='small')
-     #修改！
+     
     parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM-EW')
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM')
 
-    #10M学生
+    
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/structRFM_11M')
 
     
@@ -59,14 +59,14 @@ def get_args():
     
     #parser.add_argument('--LM_path', type=str, default='/root/autodl-tmp/structRFM-master2/model/DistilncRFM')
     #parser.add_argument('--LM_path', type=str,default='/root/autodl-tmp/structRFM-master2/model/structRFM_86M')
-    # 数据参数
+    # Dataset arguments.
     parser.add_argument('--dataset_dir', type=str, default="data/data/ires_seq", help='IRES数据根目录')
     parser.add_argument('--dataset', type=str, default="IRES", help='数据集名称')
     parser.add_argument('--max_seq_len', type=int, default=512)
     parser.add_argument('--replace_T', type=str2bool, default=True)
     parser.add_argument('--replace_U', type=str2bool, default=False)
     
-    # 训练参数
+    # Training arguments.
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--dataloader_num_workers', type=int, default=0)
     parser.add_argument('--learning_rate', type=float, default=5e-6, help='全量微调底座学习率')
@@ -83,7 +83,7 @@ def get_args():
     parser.add_argument('--metrics', type=str2list, default="F1s,Precision,Recall,Accuracy,Mcc")
     parser.add_argument('--logging_steps', type=int, default=1000, help='日志打印间隔')
     
-    # LoRA参数
+    # LoRA arguments.
     parser.add_argument('--use_lora', type=str2bool, default=False)
     parser.add_argument('--lora_r', type=int, default=128)
     parser.add_argument('--lora_alpha', type=int, default=256)
@@ -93,7 +93,7 @@ def get_args():
     parser.add_argument('--load_in_4bit', type=str2bool, default=False)
     parser.add_argument('--bnb_4bit_quant_type', type=str, default="nf4")
     
-    # 保存参数
+    # Checkpoint arguments.
     parser.add_argument('--output_dir', type=str, default=None)
     parser.add_argument('--save_checkpoints', type=str2bool, default=False,
                         help='Efficiency runs skip saving/restoring duplicate weights; true restores checkpoint saving.')
@@ -102,36 +102,36 @@ def get_args():
     parser.add_argument('--load_best_model_at_end', type=str2bool, default=True)
     parser.add_argument('--metric_for_best_model', type=str, default='auc', choices=['auc'])
     parser.add_argument('--greater_is_better', type=str2bool, default=True)
-    # 修改原因：原参数未实现；新版仅保存覆盖best_model，避免虚假保留策略；修改时间：2026-10-15
+    
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--pos_weight', type=float, default=2.5)
     
     args = parser.parse_args()
     return args
 
-# ========== 工具函数 ==========
+
 def freeze(model):
-    """冻结模型所有参数"""
+    """Freeze all model parameters."""
     for name, para in model.named_parameters():
         para.requires_grad = False
 
 def init_lora_model(model, args):
-    """适配structRFM的LoRA初始化"""
+    """Configure LoRA and attach adapters to the model."""
     if not args.use_lora:
         return model
     
-    # 4bit训练准备
+    # Prepare for optional 4-bit training.
     if args.load_in_4bit:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     for name, param in model.named_parameters():
         param.requires_grad = False
     
-    # 解析LoRA目标层
+    # Resolve LoRA target modules.
     target_modules = [m.strip() for m in args.lora_target_modules.split(",") if m.strip()]
     if args.model_name == "structRFM" and not target_modules:
         target_modules = ["query", "value"]
     
-    # LoRA配置
+    # Configure LoRA.
     lora_config = LoraConfig(
         r=args.lora_r,
         lora_alpha=args.lora_alpha,
@@ -143,10 +143,10 @@ def init_lora_model(model, args):
         modules_to_save=["cls"]
     )
     
-    # 应用LoRA
+    # Apply LoRA adapters.
     model = get_peft_model(model, lora_config)
     
-    # 打印可训练参数信息
+    # Training arguments.
     model.print_trainable_parameters()
     trainable_params = []
     for name, param in model.named_parameters():
@@ -166,16 +166,16 @@ def init_lora_model(model, args):
     
     return model
 
-# ========== 主函数 ==========
+
 if __name__ == "__main__":
     args = get_args()
-    # 修改原因：固定随机性，并拒绝没有正确实现的运行选项；修改时间：2026-10-15
+    
     import random, numpy as np, json
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
-    # 修改原因：记录测试集选模协议与池化方式，禁止混同独立测试；修改时间：2026-10-15
+    
     args.use_mean_feature = args.pooling == 'nucleotide_mean_v1'
     get_structRFM_for_cls = get_ires_mean_model if args.use_mean_feature else get_cls_model
     args.evaluation_protocol = 'test_selected_diagnostic'
@@ -192,18 +192,18 @@ if __name__ == "__main__":
     if not np.isfinite(args.pos_weight) or args.pos_weight <= 0 or args.num_train_epochs < 1:
         raise ValueError("Invalid pos_weight/num_train_epochs")
     
-    # 修改原因：本次只运行全量微调，避免误冻结或误启用LoRA；修改时间：2026-10-15
+    
     if args.use_lora or args.freeze_base:
         raise ValueError('第五版要求use_lora=False且freeze_base=False')
     if args.eval_steps < 1 or any(not np.isfinite(x) or x <= 0 for x in [args.learning_rate, args.head_learning_rate]):
         raise ValueError('eval_steps和两个学习率必须为正数')
 
-    # 后处理参数
+    
     if args.max_seq_len == 0:
         args.max_seq_len = MAX_SEQ_LEN[args.model_name]
     assert args.replace_T ^ args.replace_U, "Only replace T or U."
 
-    # 修改原因：本任务174nt，无需旧长序列分支；固定受检长度并保存绝对路径以支持异目录评估；修改时间：2026-10-15
+    
     if args.max_seq_len != 512:
         raise ValueError("本次修复保持max_seq_len=512；长度优化留待后续实验。")
     args.LM_path = project_path(args.LM_path)
@@ -213,18 +213,18 @@ if __name__ == "__main__":
     if target.exists() and any(target.iterdir()):
         raise FileExistsError(f'Use a new output directory to preserve old checkpoints: {target}')
 
-    # ========== 构建模型和分词器 ==========
+    
     from_pretrained = args.LM_path
     model_paras = get_model_scale(args.model_scale)
     print("!"*20)
     print(args.model_scale)
     print( model_paras)
     print("!"*20)
-    # 适配长序列
+    # Adjust the model for longer inputs.
     if args.max_seq_len + 2 > 514:
         tokenizer = get_mlm_tokenizer(max_length=args.max_seq_len + 2)
         model = get_structRFM_for_cls(
-            num_class=len(LABEL2ID["IRES"]),  # 2分类
+            num_class=len(LABEL2ID["IRES"]),  # Binary classification.
             from_pretrained=from_pretrained,
             tokenizer=tokenizer,
             pretrained_length=514,
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     else:
         tokenizer = AutoTokenizer.from_pretrained(from_pretrained)
         model = get_structRFM_for_cls(
-            num_class=len(LABEL2ID["IRES"]),  # 2分类
+            num_class=len(LABEL2ID["IRES"]),  # Binary classification.
             from_pretrained=from_pretrained,
             tokenizer=tokenizer,
             freeze_base=args.freeze_base and not args.use_lora,
@@ -243,18 +243,18 @@ if __name__ == "__main__":
             **model_paras
         )
     
-    # 应用LoRA
+    # Apply LoRA adapters.
     print('=== 应用LoRA前的模型结构 ===')
     print(model)
     if args.use_lora:
         model = init_lora_model(model, args)
 
-    # ========== 设备配置 ==========
+    
     args.device = torch.device(args.device)
     model.to(args.device)
     # Single selected device, matching the other efficiency tasks.
     
-    # 打印参数统计
+    
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"\n===== 参数统计 =====")
@@ -262,10 +262,10 @@ if __name__ == "__main__":
     print(f"可训练参数: {trainable_params:,}")
     print(f"可训练占比: {trainable_params/total_params*100:.4f}%")
 
-    # ========== 损失函数/优化器/指标 ==========
+    
     _loss_fn = SeqClsLoss(pos_weight=args.pos_weight).to(args.device)
     
-    # 修改原因：预训练底座小步更新，随机分类头使用独立学习率；修改时间：2026-10-15
+    
     raw_model = model.module if isinstance(model, torch.nn.DataParallel) else model
     backbone_params = list(raw_model.structRFM.parameters())
     head_params = list(raw_model.cls.parameters())
@@ -279,26 +279,26 @@ if __name__ == "__main__":
 
     _metric = SeqClsMetrics(metrics=args.metrics)
 
-    # ========== 输出目录 ==========
+    
     args.output_dir = str(Path(args.output_dir) / args.pooling)
     os.makedirs(args.output_dir, exist_ok=True)
     if args.use_lora:
         args.output_dir = os.path.join(args.output_dir, f"lora_r{args.lora_r}_alpha{args.lora_alpha}")
         os.makedirs(args.output_dir, exist_ok=True)
 
-    # 修改原因：新实验不能覆盖旧实验或不同配置；修改时间：2026-10-15
+    
     if any(Path(args.output_dir).iterdir()):
         raise FileExistsError(f"输出目录非空，请指定新的--output_dir: {args.output_dir}")
-    # ========== 加载数据集（核心修改） ==========
+    
     dataset_train = IRESDataset(
-    fasta_dir=args.dataset_dir,  # 指向 ires_seq 文件夹
-    prefix="",                   # 留空（IRES目录结构不需要prefix）
+    fasta_dir=args.dataset_dir,  # IRES sequence directory.
+    prefix="",                   # No filename prefix is needed for the IRES layout.
     tokenizer=tokenizer,
     seed=0,
     train=True
     )
 
-    # 修改原因：诊断使用完整原训练集，测试集仅评估和选模；修改时间：2026-10-15
+    
     dataset_eval = IRESDataset(args.dataset_dir, '', tokenizer, seed=0, train=False)
     args.train_count, args.selection_count = len(dataset_train), len(dataset_eval)
     split_rows = [{"name": row[1], "label": row[2], "split": part}
@@ -310,17 +310,17 @@ if __name__ == "__main__":
         json.dump(dict(vars(args), device=str(args.device)), f, indent=2)
     print(f'Full train={len(dataset_train)}, diagnostic test selection={len(dataset_eval)}')
 
-    # ========== 数据Collator ==========
+    
     _collate_fn = SeqClsCollator(
         max_seq_len=args.max_seq_len,
         tokenizer=tokenizer,
         label2id=LABEL2ID["IRES"],
         replace_T=args.replace_T,
         replace_U=args.replace_U,
-        is_structRFM=True  # 适配structRFM
+        is_structRFM=True  # Use structRFM tokenization.
     )
 
-    # ========== 训练器 ==========
+    
     seq_cls_trainer = SeqClsTrainer(
         args=args,
         tokenizer=tokenizer,
@@ -333,6 +333,6 @@ if __name__ == "__main__":
         compute_metrics=_metric,
     )
 
-    # ========== 训练/验证 ==========
+    
     if args.train:
         seq_cls_trainer.fit()

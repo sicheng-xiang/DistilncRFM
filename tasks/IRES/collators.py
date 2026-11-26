@@ -60,8 +60,8 @@ class SeqClsCollator(BaseCollator):
             input_ids_stack.append(input_ids)
             labels_stack.append(label)
 
-        # 修改原因：显式标记PAD，避免填充参与注意力；修改时间：2026-10-15
-        # 修改原因：Windows 上 np.stack 的整数默认为 int32（Linux 为 int64），CUDA 交叉熵不支持 int32 标签，统一转 int64 与服务器一致；修改时间：2026-11-09
+        
+        
         input_tensor = torch.from_numpy(self.stack_fn(input_ids_stack)).long()
         return {
             "attention_mask": input_tensor.ne(self.tokenizer.pad_token_id).long(),

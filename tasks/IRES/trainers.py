@@ -1,5 +1,5 @@
-# 修改原因：保留第四版，按优化器step评估与保存，恢复训练状态；修改时间：2026-10-15
-# 修改原因：独立第四版测试集选模诊断，保留原版与规范验证集实验；修改时间：2026-10-15
+
+
 import os
 import time
 from itertools import islice
@@ -14,10 +14,10 @@ from collections import defaultdict
 
 import pandas as pd
 import numpy as np
-# 修改原因：移除未使用的旧 metrics 导入，避免携带无关旧指标代码；修改时间：2026-11-09
 
 
-# 修改原因：测试集诊断选模、统一预测保存、纠正loss日志及实现最佳权重恢复；修改时间：2026-10-15
+
+
 class SeqClsTrainer(BaseTrainer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -25,7 +25,7 @@ class SeqClsTrainer(BaseTrainer):
         self.best_epoch = None
         self.best_state = None
         self.best_path = None
-        # 修改原因：跨epoch累计优化器更新次数，记录准确选模位置；修改时间：2026-10-15
+        
         self.global_step = 0
         self.last_eval_step = None
         self.step_in_epoch = 0
@@ -112,7 +112,7 @@ class SeqClsTrainer(BaseTrainer):
         print(f"Train epoch={epoch + 1} weighted_mean_loss={total_loss / total_weight:.6f}")
         return total_loss / total_weight
 
-    # 修改原因：中途评估后恢复train模式和随机数状态，不干扰后续dropout；修改时间：2026-10-15
+    
     def eval(self, epoch):
         was_training = self.model.training
         devices = list(range(torch.cuda.device_count())) if self.args.device.type == 'cuda' else []
@@ -160,11 +160,11 @@ class SeqClsTrainer(BaseTrainer):
     def _save_model(self, metrics, epoch):
         if self.args.save_strategy not in ('steps', 'epoch'):
             return
-        # 修改原因：此诊断仅按测试AUROC选模，拒绝误用其他指标；修改时间：2026-10-15
+        
         if self.args.metric_for_best_model != 'auc' or not self.args.greater_is_better:
             raise ValueError('Diagnostic selection requires maximum test AUROC')
         key = 'auc' 
-        current = metrics[key]  # 无效指标应报错，不能默认为0。
+        current = metrics[key]  # Reject invalid metrics instead of silently substituting zero.
         if not np.isfinite(current):
             raise ValueError('Non-finite selection AUROC')
         improved = current > self.max_metric if self.args.greater_is_better else current < self.max_metric
@@ -190,11 +190,11 @@ class SeqClsTrainer(BaseTrainer):
                       evaluation_protocol=self.args.evaluation_protocol)
         with open(os.path.join(save_dir, "run_config.json"), "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        # 修改原因：最佳预测与最佳模型同步保存，可直接复算ROC/PR；修改时间：2026-10-15
+        
         import shutil
         shutil.copyfile(os.path.join(self.args.output_dir, f"diagnostic_test_step_{self.global_step}.csv"),
                         os.path.join(save_dir, "diagnostic_test_predictions.csv"))
-        # 仅成功落盘后更新最佳记录；恢复包含buffer的完整state，支持LoRA和非LoRA。
+        # Update the best-model record only after saving; restore buffers as well as parameters.
         self.best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         self.best_step = self.global_step
         self.max_metric, self.best_epoch, self.best_path = current, epoch + 1, save_dir

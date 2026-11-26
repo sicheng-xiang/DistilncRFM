@@ -14,7 +14,7 @@ class SeqClsMetrics(BaseMetrics):
         self.pred = None
 
     def __call__(self, outputs, labels):
-        # 保存完整的logits [batch, 2]
+        # Retain full logits with shape [batch, 2].
         self.y_score.extend(outputs.detach().cpu().numpy())
         self.y_true.extend(labels.detach().cpu().numpy())
         return {}
@@ -23,18 +23,18 @@ class SeqClsMetrics(BaseMetrics):
         y_true = np.array(self.y_true)
         y_score = np.array(self.y_score)
 
-        # 使用softmax获取概率，与RNALoc-LM的CrossEntropyLoss一致
+        # Convert logits to probabilities with softmax.
         exp_scores = np.exp(y_score - np.max(y_score, axis=1, keepdims=True))
         probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
-        y_preds = np.argmax(probs, axis=1)  # argmax获取预测标签
+        y_preds = np.argmax(probs, axis=1)  # Select predicted labels with argmax.
 
-        # 使用sklearn macro average计算指标（与RNALoc-LM/base.py一致）
+        # Compute macro-averaged classification metrics.
         acc = accuracy_score(y_true, y_preds)
         precision = precision_score(y_true, y_preds, average='macro', zero_division=0)
         recall = recall_score(y_true, y_preds, average='macro', zero_division=0)
         f1s = f1_score(y_true, y_preds, average='macro', zero_division=0)
         
-        # MCC单独计算
+        # Compute MCC separately.
         tp = ((y_preds == 1) & (y_true == 1)).sum()
         tn = ((y_preds == 0) & (y_true == 0)).sum()
         fp = ((y_preds == 1) & (y_true == 0)).sum()
@@ -53,7 +53,7 @@ class SeqClsMetrics(BaseMetrics):
 
         ret = {m: metric_map[m.lower()] for m in self.metrics if m.lower() in metric_map}
         
-        # 打印详细报告
+        
         print("\n详细分类报告:")
         report = classification_report(y_true, y_preds, zero_division=0)
         print(report)
@@ -67,7 +67,7 @@ class SeqClsMetrics(BaseMetrics):
         auc = 0.0
         aupr = 0.0
         try:
-            # 使用softmax后的第1类概率计算AUC/AUPR
+            # Use class-1 probabilities for AUROC and AUPR.
             exp_scores = np.exp(y_score - np.max(y_score, axis=1, keepdims=True))
             probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
             probs_class1 = probs[:, 1]
