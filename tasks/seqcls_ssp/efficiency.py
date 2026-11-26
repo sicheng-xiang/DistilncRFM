@@ -49,14 +49,14 @@ def vram_warning(meta, peak_reserved_mb):
     total, free0 = meta.get('gpu_total_memory_mb'), meta.get('free_vram_at_start_mb')
     reserved0 = meta.get('reserved_at_start_mb') or 0
     if total and peak_reserved_mb > total:
-        detail = f'本进程显存峰值 {peak_reserved_mb:.0f} MB 已超过显卡总显存 {total:.0f} MB'
+        detail = f'Process peak memory {peak_reserved_mb:.0f} MB exceeds total GPU memory {total:.0f} MB'
     elif free0 is not None and peak_reserved_mb - reserved0 > free0:
-        detail = (f'本进程开始训练后新增显存 {peak_reserved_mb - reserved0:.0f} MB，超过开始时剩余的 {free0:.0f} MB'
-                  '（其余被后台程序占用）')
+        detail = (f'Additional process memory since training began: {peak_reserved_mb - reserved0:.0f} MB; initially free: {free0:.0f} MB'
+                  '(其余被后台程序占用)')
     else:
         return None
-    return (f'警告: {detail}。驱动可能已借用系统内存，训练会极慢，耗时与吞吐量不能作为效率结果。'
-            '请关闭占显存的程序（浏览器、壁纸引擎、Steam、会议软件等）后重跑，或减小 batch。')
+    return (f'Warning: {detail}。驱动可能已借用系统内存; 训练会极慢; 耗时与吞吐量不能作为效率结果。'
+            '请关闭占显存的程序(浏览器、壁纸引擎、Steam、会议软件等)后重跑; 或减小 batch。')
 
 
 def summarize(rows, total_wall_time_s, meta):
@@ -107,21 +107,21 @@ def format_summary(s):
     def mb(v):
         return 'N/A (CPU)' if v is None else f'{v:.1f} MB'
     lines = [
-        '===== 效率汇总（仅本训练进程）=====',
-        f"训练阶段显存峰值: allocated {mb(s['train_peak_allocated_mb'])} | reserved {mb(s['train_peak_reserved_mb'])}",
-        f"评估阶段显存峰值: allocated {mb(s['eval_peak_allocated_mb'])} | reserved {mb(s['eval_peak_reserved_mb'])}",
-        f"吞吐量: {s['throughput_batch_per_s']:.3f} batch/s（1 batch = {s['effective_batch_size']} 条样本 = 1 次参数更新）"
-        f"，{s['throughput_samples_per_s']:.1f} samples/s",
+        '===== Training efficiency (current process) =====',
+        f"Training peak memory: allocated {mb(s['train_peak_allocated_mb'])} | reserved {mb(s['train_peak_reserved_mb'])}",
+        f"Evaluation peak memory: allocated {mb(s['eval_peak_allocated_mb'])} | reserved {mb(s['eval_peak_reserved_mb'])}",
+        f"Throughput: {s['throughput_batch_per_s']:.3f} batch/s (1 batch = {s['effective_batch_size']} samples = 1 optimizer update)"
+        f"; {s['throughput_samples_per_s']:.1f} samples/s",
     ]
     if s['gradient_accumulation_steps'] > 1:
-        lines.append(f"  梯度累积: 每次更新 {s['gradient_accumulation_steps']} 个 micro-batch × {s['batch_size']} 条，"
+        lines.append(f"  Gradient accumulation per update: {s['gradient_accumulation_steps']} micro-batches × {s['batch_size']} samples; "
                      f"{s['throughput_micro_batch_per_s']:.3f} micro-batch/s")
     if s['throughput_batch_per_s_excl_epoch1'] is not None:
-        lines.append(f"吞吐量(去掉第1轮预热): {s['throughput_batch_per_s_excl_epoch1']:.3f} batch/s")
+        lines.append(f"Throughput excluding first-epoch warmup: {s['throughput_batch_per_s_excl_epoch1']:.3f} batch/s")
     lines += [
-        f"总耗时(含每轮测试评估与保存): {s['total_wall_time_s']:.1f} s = {s['total_wall_time_s'] / 3600:.3f} h",
-        f"纯训练耗时(前向+反向+更新+取数据): {s['train_time_s']:.1f} s；平均每轮训练 {s['mean_epoch_train_time_s']:.2f} s，"
-        f"平均每轮总计 {s['mean_epoch_wall_time_s']:.2f} s（{s['epochs_completed']} 轮）",
+        f"Total time including evaluation and saving: {s['total_wall_time_s']:.1f} s = {s['total_wall_time_s'] / 3600:.3f} h",
+        f"Training time (forward, backward, updates, loading): {s['train_time_s']:.1f} s; mean epoch training time: {s['mean_epoch_train_time_s']:.2f} s; "
+        f"mean epoch total time: {s['mean_epoch_wall_time_s']:.2f} s({s['epochs_completed']} epochs)",
     ]
     if s['vram_warning']:
         lines.append(s['vram_warning'])

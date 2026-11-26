@@ -185,7 +185,7 @@ def init_lora_model(model_args, training_args, model):
         # Training arguments.
         model.print_trainable_parameters()
          
-        print("\n=== 可训练参数明细（requires_grad=True）===")
+        pass
         trainable_params = []
         for name, param in model.named_parameters():
             if param.requires_grad:
@@ -198,16 +198,16 @@ def init_lora_model(model_args, training_args, model):
         
         # Training arguments.
         for idx, param in enumerate(trainable_params, 1):
-            print(f"[{idx}] 名称: {param['name']}")
-            print(f"    数量: {param['num_params']:,} | 形状: {param['shape']} | 类型: {param['dtype']}")
+            pass
+            pass
         
         
         total_trainable = sum(p["num_params"] for p in trainable_params)
         total_all = sum(p.numel() for p in model.parameters())
-        print(f"\n=== 可训练参数汇总 ===")
-        print(f"📝 可训练参数总数: {total_trainable:,}")
-        print(f"📝 模型总参数数: {total_all:,}")
-        print(f"📝 可训练比例: {total_trainable/total_all*100:.4f}%")
+        print(f"\n=== Parameter summary ===")
+        print(f"Trainable parameters: {total_trainable:,}")
+        print(f"Total parameters: {total_all:,}")
+        print(f"Trainable fraction: {total_trainable/total_all*100:.4f}%")
         # ==========================================================
 
        
@@ -443,7 +443,7 @@ def compute_metrics(eval_pred):
     
     # Use the logits entry when predictions are a tuple.
     if isinstance(predictions, tuple):
-        print('处理predictions是元组的情况 - 取第一个元素（logits）')
+        pass
         predictions = predictions[0]
         print(f"Using predictions[0] with shape: {predictions.shape}")
     
@@ -633,17 +633,17 @@ def train():
             tokenizer=tokenizer,
             output_hidden_states=False,
         )
-    print('before lora',model)
+    pass
     model = init_lora_model(model_args, training_args, model)
     # if training_args.freeze_base:
     #     # only freeze encoder
     #     for para in model.bert.encoder.parameters():
     #         para.requires_grad = False
     print(f'{training_args.model_type}')
-    print('after lora',model)
+    pass
     os.makedirs(training_args.output_dir, exist_ok=True)
     with open(os.path.join(training_args.output_dir, f'{training_args.model_type}_network.txt'), 'w') as fp:
-        print(model, file=fp)
+        pass
     total_para = sum([p.numel() for p in model.parameters()])
     train_para = sum([p.numel() for p in model.parameters() if p.requires_grad])
     print(f'freeze_base: {training_args.freeze_base}, train/total={train_para}/{total_para}')

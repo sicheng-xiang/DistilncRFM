@@ -142,13 +142,13 @@ class InferenceMeter:
         path.write_text(json.dumps(self.result, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
         def mb(value):
             return 'N/A (CPU)' if value is None else f'{value:.1f} MB'
-        print('\n===== 推理效率（预热后，仅本进程）=====', flush=True)
+        print('\n===== Inference efficiency (after warmup, current process) =====', flush=True)
         print(f"LoRA merged: {self.result['lora_merged']}; precision: {self.result['precision']}; batch: {self.batch_size}")
-        print(f"纯前向: {self.result['inference_time_s']:.3f}s; "
+        print(f"Forward only: {self.result['inference_time_s']:.3f}s; "
               f"{self.result['throughput_batch_per_s']:.3f} batch/s; "
               f"{self.result['throughput_samples_per_s']:.1f} samples/s")
-        print(f"含取数据/传输/收集预测: {self.result['inference_pipeline_time_s']:.3f}s; "
+        print(f"Data loading, transfers and prediction collection: {self.result['inference_pipeline_time_s']:.3f}s; "
               f"{self.result['pipeline_throughput_samples_per_s']:.1f} samples/s")
-        print(f"显存峰值: allocated {mb(self.result['peak_allocated_mb'])}; reserved {mb(self.result['peak_reserved_mb'])}")
+        print(f"Peak memory: allocated {mb(self.result['peak_allocated_mb'])}; reserved {mb(self.result['peak_reserved_mb'])}")
         print('Inference measurements:', path, flush=True)
         return self.result

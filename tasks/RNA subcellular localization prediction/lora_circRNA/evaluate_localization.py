@@ -62,7 +62,7 @@ def main():
         value = Path(getattr(args, key)).expanduser()
         setattr(args, key, str((value if value.is_absolute() else ROOT / value).resolve()))
     device = torch.device(args.device or ('cuda:0' if torch.cuda.is_available() else 'cpu'))
-    print('底座:', args.LM_path, '\n适配器:', args.lora_path, '\n设备:', device)
+    print('Backbone:', args.LM_path, '\nAdapter:', args.lora_path, '\nDevice:', device)
     tokenizer = AutoTokenizer.from_pretrained(args.LM_path)
     dataset = RNADataset(args.data_dir, 'circRNA', 'test', tokenizer,
                          seed=0, train=False, max_nt_exclusive=512)
@@ -122,7 +122,7 @@ def main():
             w.writerow([names[i], lengths[i], truth[i], pred[i], *scores[i], *probs[i]])
     print(classification_report(truth, pred, labels=[0,1], target_names=['nucleus','cytoplasm'], digits=4, zero_division=0))
     print(json.dumps(results, indent=2, ensure_ascii=False))
-    print('结果已保存:', out_dir)
+    print('Results saved:', out_dir)
 
 
 if __name__ == '__main__':

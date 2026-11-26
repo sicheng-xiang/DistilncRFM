@@ -54,7 +54,7 @@ class SeqClsMetrics(BaseMetrics):
         ret = {m: metric_map[m.lower()] for m in self.metrics if m.lower() in metric_map}
         
         
-        print("\n详细分类报告:")
+        print("\nClassification report:")
         report = classification_report(y_true, y_preds, zero_division=0)
         print(report)
         

@@ -106,7 +106,7 @@ def get_bert(dim, layer, num_attention_heads=12, from_pretrained=None, pretraine
     else:
         model = model_class(config=model_config)
         print('model:')
-        print(model)
+        pass
         total_params = sum(p.numel() for p in model.parameters())
         print(f'Total params: {total_params}')
         return model

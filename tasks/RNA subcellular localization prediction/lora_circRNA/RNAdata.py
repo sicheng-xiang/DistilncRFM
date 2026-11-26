@@ -52,8 +52,8 @@ class RNADataset(Dataset):
             before = len(self.data)
             self.data = [item for item in self.data if len(item[0]) < max_nt_exclusive]
             split_name = "train" if train else "test"
-            print(f"{dataset_type} {split_name}: nt长度 < {max_nt_exclusive}，"
-                  f"筛选前 {before}，保留 {len(self.data)}，移除 {before - len(self.data)}")
+            print(f"{dataset_type} {split_name}: nucleotide length < {max_nt_exclusive}; "
+                  f"before filtering:  {before}; retained:  {len(self.data)}; removed:  {before - len(self.data)}")
             if not self.data:
                 raise ValueError(f"{dataset_type} {split_name} 筛选后为空")
 

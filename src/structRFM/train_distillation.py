@@ -69,11 +69,11 @@ class DistillMLMTrainer(Trainer):
         
         if hasattr(self.model, 'feature_up_sample'):
             self.model.feature_up_sample = self.model.feature_up_sample.to(self.args.device)
-            print("\n✅ 检测到已有 feature_up_sample，直接继承 checkpoint 中的权重，不重新初始化")
+            pass
         else:
             # Create the projection only if it is absent.
             self.model.feature_up_sample = nn.Linear(384, 768).to(self.args.device)
-            print("\n⚠️ 模型中不存在 feature_up_sample，已重新创建 nn.Linear(384, 768)")
+            pass
 
         self.feature_up_sample = self.model.feature_up_sample
 
@@ -153,14 +153,14 @@ class DistillMLMTrainer(Trainer):
         }
 
         if self.use_tree_adaptive_weight:
-            print("\n" + "=" * 70)
-            print("🌳 树状自适应蒸馏权重已启用")
-            print(f"   Baseline初始化batch数: {self.adaptive_warmup_batches}")
-            print(f"   EMA beta: {self.adaptive_ema_beta}")
-            print(f"   Feature根节点degree: {self.adaptive_root_degree}")
-            print("   初始权重: Feature=1.0, Relation=1.0, Output=1.0")
-            print("   MLM权重始终固定为1.0")
-            print("=" * 70 + "\n")
+            pass
+            pass
+            pass
+            pass
+            pass
+            pass
+            pass
+            pass
 
         # Monitor parameter and adaptive-weight changes.
         self.weight_monitor = {
@@ -175,20 +175,13 @@ class DistillMLMTrainer(Trainer):
             'has_computed_loss': False,
         }
 
-        print("\n" + "=" * 70)
-        print("✅ 权重监控已启动（FIX版本 - 上采样层已加入模型）")
-        print(
-            f"   初始 feature_up_sample weight shape: "
-            f"{self.weight_monitor['initial_weight'].shape}"
-        )
-        print(
-            f"   初始 weight 范围: "
-            f"[{self.weight_monitor['initial_weight'].min():.6f}, "
-            f"{self.weight_monitor['initial_weight'].max():.6f}]"
-        )
-        print(f"   feature_up_sample 已添加到 model.feature_up_sample")
-        print(f"   ✅ 此层现在将被优化器追踪！")
-        print("=" * 70 + "\n")
+        pass
+        pass
+        pass
+        pass
+        pass
+        pass
+        pass
 
     def _sync_teacher_model_across_processes(self):
         """Synchronize teacher parameters across distributed processes."""
@@ -279,22 +272,13 @@ class DistillMLMTrainer(Trainer):
                     # Initialize normalized losses to one.
                     self.adaptive_q[key] = 1.0
 
-                print("\n" + "=" * 70)
-                print("🌳 Adaptive baseline 初始化完成")
-                print(
-                    f"   B_feature = "
-                    f"{self.adaptive_baseline['feature']:.8f}"
-                )
-                print(
-                    f"   B_relation = "
-                    f"{self.adaptive_baseline['relation']:.8f}"
-                )
-                print(
-                    f"   B_output = "
-                    f"{self.adaptive_baseline['output']:.8f}"
-                )
-                print("   注意：三个B_i从现在开始永久固定，不再更新")
-                print("=" * 70 + "\n")
+                pass
+                pass
+                pass
+                pass
+                pass
+                pass
+                pass
 
             # Keep equal weights throughout warmup.
             self.adaptive_lambda['feature'] = 1.0
@@ -600,21 +584,12 @@ class DistillMLMTrainer(Trainer):
         ):
             self.weight_monitor['has_computed_loss'] = True
 
-            print("\n" + "=" * 60)
-            print("✅ 第一次计算 feature_loss，说明上采样层正在使用！")
-            print(
-                f"   feature_loss = "
-                f"{feature_loss.item():.6f}"
-            )
-            print(
-                f"   feature_up_sample.weight.requires_grad = "
-                f"{self.feature_up_sample.weight.requires_grad}"
-            )
-            print(
-                f"   feature_up_sample 在计算图中: "
-                f"{self.feature_up_sample.weight.is_leaf}"
-            )
-            print("=" * 60 + "\n")
+            pass
+            pass
+            pass
+            pass
+            pass
+            pass
 
         
         if (
@@ -705,12 +680,12 @@ class DistillMLMTrainer(Trainer):
 
     # Inspect parameters included in the optimizer.
     def show_optimizer_params(self):
-        print("\n===== 优化器中可训练的参数列表 =====")
+        pass
 
         for i, param_group in enumerate(
             self.optimizer.param_groups
         ):
-            print(f"Param group {i}:")
+            pass
 
             for j, p in enumerate(
                 param_group['params']
@@ -718,12 +693,9 @@ class DistillMLMTrainer(Trainer):
                 if p.requires_grad:
                     for name, param in self.model.named_parameters():
                         if p is param:
-                            print(
-                                f"  ✅ 可训练: "
-                                f"{name} | shape={p.shape}"
-                            )
+                            pass
 
-        print("===================================\n")
+        pass
  
 
 def set_seed(seed, deterministic=True):
@@ -774,7 +746,7 @@ def parse_args():
 
 def pretrain(args, tag):
     model_scale_paras = get_model_scale(args.model_scale)
-    print('model_scale', args.model_scale, model_scale_paras)
+    pass
     for k, v in model_scale_paras.items():
         setattr(args, k, v)
 
@@ -796,8 +768,8 @@ def pretrain(args, tag):
                                        max_length=args.max_length,  output_hidden_states=True)
         model_name = 'llama'
     model_param_size = sum(t.numel() for t in model.parameters())
-    print(model)
-    print(f"{model_name} model paras: {model_param_size / 1e6:.1f}M")
+    pass
+    pass
 
     dataset = preprocess_and_load_dataset(args.data_path, tokenizer, tag, with_structure=False)
     split_dataset = dataset
@@ -806,21 +778,21 @@ def pretrain(args, tag):
             split_dataset['test'] = split_dataset['validate']
         else:
             split_dataset = dataset['train'].train_test_split(test_size=0.05, seed=args.seed)
-    print(split_dataset)
+    pass
 
     
-    print("="*50)
-    print("数据集各子集条数统计：")
+    pass
+    pass
     for split_name in split_dataset.keys():
         subset_size = len(split_dataset[split_name])
-        print(f"- {split_name} 集：{subset_size} 条数据")
+        print(f"- {split_name} split: {subset_size} records")
     total_size = sum(len(split_dataset[split]) for split in split_dataset.keys())
-    print(f"- 数据集总条数：{total_size} 条")
-    print("="*50)
+    print(f"- Total records: {total_size} records")
+    pass
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=tag == 'mlm')
     if tag == 'mlm':
-        print('MLM masking: standard random masking')
+        pass
 
     
     
@@ -881,19 +853,19 @@ def pretrain(args, tag):
         )
 
     if args.resume_from_checkpoint and os.path.isdir(args.resume_from_checkpoint):
-        print(f'Resume_from_checkpoint {args.resume_from_checkpoint}')
+        pass
         trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     elif any(f.startswith('checkpoint') for f in os.listdir(args.run_name)):
-        print(f'Resume_from_checkpoint...')
+        pass
         trainer.train(resume_from_checkpoint=True)
     else:
         trainer.train()
 
     
     if hasattr(trainer, 'weight_monitor'):
-        print("\n" + "="*70)
-        print("🎯 训练完成 - Feature Upsampler 权重变化报告")
-        print("="*70)
+        pass
+        pass
+        pass
 
         monitor = trainer.weight_monitor
 
@@ -901,36 +873,36 @@ def pretrain(args, tag):
         final_weight = trainer.model.feature_up_sample.weight.data
         total_weight_change = torch.norm(final_weight - monitor['initial_weight']).item()
 
-        print(f"\n📊 权重变化统计：")
-        print(f"   初始权重范围: [{monitor['initial_weight'].min():.6f}, {monitor['initial_weight'].max():.6f}]")
-        print(f"   最终权重范围: [{final_weight.min():.6f}, {final_weight.max():.6f}]")
-        print(f"   总权重变化量 (L2范数): {total_weight_change:.6f}")
-        print(f"   权重是否变化: {'✅ YES - 权重已更新（修复成功！）' if total_weight_change > 1e-6 else '❌ NO - 权重未更新'}")
+        pass
+        pass
+        pass
+        pass
+        pass
 
         if len(monitor['weight_updates']) > 0:
-            print(f"\n📈 监控记录（每50步）：")
-            print(f"   {'Step':<8} {'Weight Change':<15} {'Weight Range':<30}")
-            print(f"   {'-'*55}")
+            pass
+            pass
+            pass
             for record in monitor['weight_updates'][-10:]:  # Print the last ten records.
                 w_min, w_max = record['current_weight_range']
-                print(f"   {record['step']:<8} {record['weight_change']:<15.6f} [{w_min:.6f}, {w_max:.6f}]")
+                pass
 
         if len(monitor['grad_norms']) > 0:
-            print(f"\n🔄 梯度范数（每50步）：")
-            print(f"   {'Step':<8} {'Grad Norm':<15}")
-            print(f"   {'-'*25}")
+            pass
+            pass
+            pass
             for record in monitor['grad_norms'][-10:]:  # Print the last ten records.
-                print(f"   {record['step']:<8} {record['grad_norm']:<15.6f}")
+                pass
 
-        print("\n" + "="*70 + "\n")
+        pass
 
 
 def run_pretrain():
-    print(f'Begin time: {datetime.now()}')
+    pass
     args = parse_args()
     assert args.tag in {'mlm', 'ar'}, f'tag={args.tag} should be "mlm" or "ar"'
     pretrain(args, args.tag)
-    print(f'End time: {datetime.now()}')
+    pass
 
 if __name__ == '__main__':
     run_pretrain()

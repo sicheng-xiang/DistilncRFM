@@ -131,7 +131,7 @@ class structRFM_infer:
             # Add annotations to the batch.
             inputs["position_array"] = torch.tensor(all_position_arrays)
             # print('!!!!!'*5)
-            print(f"DEBUG: 添加 position_array: {inputs['position_array']}")
+            pass
             # print('!!!!!' * 5)
             
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}

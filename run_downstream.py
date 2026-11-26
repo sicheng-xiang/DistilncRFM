@@ -1,4 +1,4 @@
-# 修改原因：统一 Windows 入口，显式匹配四类底座与适配器；修改时间：2026-11-09
+
 import argparse, json, os, subprocess, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent

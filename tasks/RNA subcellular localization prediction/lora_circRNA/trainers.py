@@ -169,10 +169,10 @@ class SeqClsTrainer(BaseTrainer):
                     self.model.module.save_pretrained(save_dir, safe_serialization=False)
                 else:
                     self.model.save_pretrained(save_dir, safe_serialization=False)
-                print(f"新最优模型！Epoch {epoch} | F1: {f1_val:.4f}")
-                print(f"已保存至: {save_dir}")
+                print(f"New best checkpoint: epoch {epoch} | F1: {f1_val:.4f}")
+                print(f"Saved to: {save_dir}")
             except Exception as e:
-                print(f"保存失败: {e}")
+                print(f"Save failed: {e}")
 
 
 class RRInterTrainer(BaseTrainer):

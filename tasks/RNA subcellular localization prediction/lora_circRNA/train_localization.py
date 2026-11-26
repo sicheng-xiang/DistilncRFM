@@ -158,12 +158,12 @@ def init_lora_model(model, args):
                 "shape": list(param.shape),
                 "dtype": str(param.dtype)
             })
-    print("\n=== 可训练参数明细 ===")
+    pass
     for idx, p in enumerate(trainable_params, 1):
-        print(f"[{idx}] 名称: {p['name']} | 数量: {p['num_params']:,} | 形状: {p['shape']}")
+        pass
     total_trainable = sum(p["num_params"] for p in trainable_params)
     total_all = sum(p.numel() for p in model.parameters())
-    print(f"\n可训练参数占比: {total_trainable/total_all*100:.4f}%")
+    print(f"\nTrainable fraction: {total_trainable/total_all*100:.4f}%")
     
     return model
 
@@ -222,12 +222,12 @@ if __name__ == "__main__":
         )
     
     # Apply LoRA adapters.
-    print('=== 应用LoRA前的模型结构 ===')
-    print(model)
+    pass
+    pass
     if args.use_lora:
         model = init_lora_model(model, args)
-    print('=== 应用LoRA后的模型结构 ===')
-    print(model)
+    pass
+    pass
 
 
     
@@ -238,10 +238,10 @@ if __name__ == "__main__":
     
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"\n===== 参数统计 =====")
-    print(f"总参数: {total_params:,}")
-    print(f"可训练参数: {trainable_params:,}")
-    print(f"可训练占比: {trainable_params/total_params*100:.4f}%")
+    print(f"\n===== Parameters =====")
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    print(f"Trainable fraction: {trainable_params/total_params*100:.4f}%")
 
     
     # For lncRNA, cytoplasm (label 1) is the minority class.
@@ -282,7 +282,7 @@ if __name__ == "__main__":
         train=False,
         max_nt_exclusive=512
     )
-    print('\n===== 数据统计 =====')
+    print('\n===== Dataset sizes =====')
     print(f'dataset train: {len(dataset_train)}, test: {len(dataset_eval)}')
     
     # Cosine learning-rate schedule with warmup.
@@ -305,7 +305,7 @@ if __name__ == "__main__":
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps,
         )
-        print(f"学习率调度: cosine, warmup={args.warmup_epochs}epochs, min_lr={args.min_lr}")
+        print(f"Learning-rate schedule: cosine, warmup={args.warmup_epochs}epochs, min_lr={args.min_lr}")
     else:
         lr_scheduler = None
     
