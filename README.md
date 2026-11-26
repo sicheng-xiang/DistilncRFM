@@ -9,7 +9,7 @@ Use Python 3.11 and install PyTorch separately for your NVIDIA driver.
 ```shell
 conda create -n distilncrfm python=3.11 pip
 conda activate distilncrfm
-python -m pip install -r requirements_windows.txt
+python -m pip install -r requirements.txt
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 

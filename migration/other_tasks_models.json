@@ -1,0 +1,72 @@
+{
+  "nrc": {
+    "teacher": {
+      "base": "model/structRFM_86M",
+      "model_scale": "base",
+      "adapter": "tasks/seqcls_ssp/checkpoints/structRFM_86M"
+    },
+    "student": {
+      "base": "model/structRFM_11M",
+      "model_scale": "small",
+      "adapter": "tasks/seqcls_ssp/checkpoints/structRFM_11M"
+    },
+    "dis": {
+      "base": "model/DistilncRFM-EW",
+      "model_scale": "small",
+      "adapter": "tasks/seqcls_ssp/checkpoints/DistilncRFM-EW"
+    },
+    "dis_w": {
+      "base": "model/DistilncRFM",
+      "model_scale": "small",
+      "adapter": "tasks/seqcls_ssp/checkpoints/DistilncRFM"
+    }
+  },
+  "spl": {
+    "teacher": {
+      "base": "model/structRFM_86M",
+      "model_scale": "base",
+      "adapter": "tasks/splice_site_prediction/checkpoints/structRFM_86M",
+      "tokenizer": "tasks/splice_site_prediction/checkpoints/structRFM_86M"
+    },
+    "student": {
+      "base": "model/structRFM_11M",
+      "model_scale": "small",
+      "adapter": "tasks/splice_site_prediction/checkpoints/structRFM_11M",
+      "tokenizer": "tasks/splice_site_prediction/checkpoints/structRFM_11M"
+    },
+    "dis": {
+      "base": "model/DistilncRFM-EW",
+      "model_scale": "small",
+      "adapter": "tasks/splice_site_prediction/checkpoints/DistilncRFM-EW",
+      "tokenizer": "tasks/splice_site_prediction/checkpoints/DistilncRFM-EW"
+    },
+    "dis_w": {
+      "base": "model/DistilncRFM",
+      "model_scale": "small",
+      "adapter": "tasks/splice_site_prediction/checkpoints/DistilncRFM",
+      "tokenizer": "tasks/splice_site_prediction/checkpoints/DistilncRFM"
+    }
+  },
+  "circ": {
+    "teacher": {
+      "base": "model/structRFM_86M",
+      "model_scale": "base",
+      "adapter": "tasks/RNA subcellular localization prediction/lora_circRNA/checkpoints/structRFM_86M"
+    },
+    "student": {
+      "base": "model/structRFM_11M",
+      "model_scale": "small",
+      "adapter": "tasks/RNA subcellular localization prediction/lora_circRNA/checkpoints/structRFM_11M"
+    },
+    "dis": {
+      "base": "model/DistilncRFM-EW",
+      "model_scale": "small",
+      "adapter": "tasks/RNA subcellular localization prediction/lora_circRNA/checkpoints/DistilncRFM-EW"
+    },
+    "dis_w": {
+      "base": "model/DistilncRFM",
+      "model_scale": "small",
+      "adapter": "tasks/RNA subcellular localization prediction/lora_circRNA/checkpoints/DistilncRFM"
+    }
+  }
+}

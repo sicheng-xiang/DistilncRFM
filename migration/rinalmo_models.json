@@ -1,0 +1,6 @@
+{
+  "family": "tasks/seqcls_ssp/checkpoints/RiNALMo-Micro/best_model.pt",
+  "localization": "tasks/RNA subcellular localization prediction/lora_circRNA/checkpoints/RiNALMo-Micro/best_model.pt",
+  "splice": "tasks/splice_site_prediction/checkpoints/RiNALMo-Micro/best_model.pt",
+  "ires": "tasks/IRES/checkpoints/RiNALMo-Micro/best_model.pt"
+}

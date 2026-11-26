@@ -1,0 +1,44 @@
+{
+  "dataset_dir": "data/data/ires_seq",
+  "training_defaults": {
+    "batch_size": 32,
+    "learning_rate": 5e-06,
+    "head_learning_rate": 0.0001,
+    "eval_steps": 100,
+    "num_train_epochs": 15,
+    "pos_weight": 2.5,
+    "seed": 42,
+    "max_seq_len": 512,
+    "pooling": "cls",
+    "replace_T": true,
+    "replace_U": false,
+    "use_lora": false,
+    "freeze_base": false,
+    "dataloader_num_workers": 0
+  },
+  "models": {
+    "student": {
+      "base": "model/structRFM_11M",
+      "checkpoint": "tasks/IRES/checkpoints/structRFM_11M",
+      "model_scale": "small"
+    },
+    "teacher": {
+      "base": "model/structRFM_86M",
+      "checkpoint": "tasks/IRES/checkpoints/structRFM_86M",
+      "model_scale": "base"
+    },
+    "dis_w": {
+      "base": "model/DistilncRFM",
+      "checkpoint": "tasks/IRES/checkpoints/DistilncRFM",
+      "model_scale": "small"
+    },
+    "dis": {
+      "base": "model/DistilncRFM-EW",
+      "checkpoint": "tasks/IRES/checkpoints/DistilncRFM-EW",
+      "model_scale": "small",
+      "training_overrides": {
+        "eval_steps": 50
+      }
+    }
+  }
+}
